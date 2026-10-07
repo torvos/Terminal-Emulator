@@ -35,4 +35,32 @@ test("mixing a lookup and an assignment in one call", async () => {
     assertEqual(r.stdout, "alias ll='ls -la'");
 });
 
+describe("alias: built-in site shortcuts (resume, about, contact)");
+
+const SITE_SHORTCUTS = { resume: "resume.md", about: "readme.md", contact: "contact.md" };
+
+for (const [alias, file] of Object.entries(SITE_SHORTCUTS)) {
+    test(`${alias} is a default alias that prints ${file}`, async () => {
+        terminal.aliases = { ...DEFAULT_ALIASES };
+        const expected = (await run(`cat ${HOME}/${file}`)).stdout;
+        assert(expected.length > 0, `${file} should not be empty`);
+        const r = await run(alias);
+        assertEqual(r.exitCode, 0);
+        assertEqual(r.stdout, expected);
+    });
+}
+
+test("the shortcuts work from any working directory", async () => {
+    terminal.aliases = { ...DEFAULT_ALIASES };
+    await run("cd /");
+    const r = await run("contact");
+    assertEqual(r.exitCode, 0);
+    assertIncludes(r.stdout, "contact@torvos.ca");
+});
+
+test("the original default aliases are still present", async () => {
+    assertEqual(DEFAULT_ALIASES.ll, "ls -la");
+    assertEqual(DEFAULT_ALIASES["cd.."], "cd ..");
+});
+
 })();

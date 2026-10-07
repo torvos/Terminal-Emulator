@@ -85,10 +85,7 @@ class TerminalEngine {
         };
 
         // Built-in default aliases; user-defined ones merge in on top during init()
-        this.aliases = {
-            "ll": "ls -la",
-            "cd..": "cd .."
-        };
+        this.aliases = { ...DEFAULT_ALIASES };
 
         // Reference to the virtual filesystem API (see js/filesystem.js)
         this.fs = FileSystemAPI;
@@ -214,7 +211,7 @@ class TerminalEngine {
         await this.write(`|    ██║   ██║   ██║██╔══██╗╚██╗ ██╔╝██║   ██║╚════██║ |`, {color: COLOR_STDOUT});
         await this.write(`|    ██║   ╚██████╔╝██║  ██║ ╚████╔╝ ╚██████╔╝███████║ |`, {color: COLOR_STDOUT});
         await this.write(`|    ╚═╝    ╚═════╝ ╚═╝  ╚═╝  ╚═══╝   ╚═════╝ ╚══════╝ |`, {color: COLOR_STDOUT});
-        await this.write(`|            Welcome type 'help' to begin.             |`, {color: COLOR_STDOUT});
+        await this.write(`|                Welcome to Torvos.ca                  |`, {color: COLOR_STDOUT});
         await this.write(`+------------------------------------------------------+`, {color: COLOR_STDOUT});
 
         // `?run=<command>` lets a URL auto-type and auto-execute a command on load

@@ -51,6 +51,17 @@ const PAGER_SCROLL_DELAY_MS = 20;   // delay between each line when less/more sc
 const STORAGE_KEY_SETTINGS = "terminalSettings";
 const STORAGE_KEY_FILESYSTEM = "FileSystem";
 
+// Aliases every session starts with. The three site shortcuts use absolute
+// paths so they work from any working directory. User-defined/saved aliases
+// are merged on top of these at boot (see TerminalEngine.init() in core.js).
+const DEFAULT_ALIASES = {
+    "ll": "ls -la",
+    "cd..": "cd ..",
+    "resume": `cat ${HOME}/resume.md`,
+    "about": `cat ${HOME}/readme.md`,
+    "contact": `cat ${HOME}/contact.md`
+};
+
 // Private-Use-Area placeholders the tokenizer substitutes for a literal
 // "*"/"?" that came from inside quotes (or via backslash-escape) - so a
 // quoted glob character can pass all the way through wildcard expansion
