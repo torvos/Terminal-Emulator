@@ -214,6 +214,26 @@ class TerminalEngine {
         await this.write(`|                Welcome to Torvos.ca                  |`, {color: COLOR_STDOUT});
         await this.write(`+------------------------------------------------------+`, {color: COLOR_STDOUT});
 
+        // Short getting-started message: how to interact + the quick-look aliases
+        // (defined in DEFAULT_ALIASES in constants.js).
+        await this.write(``, {color: COLOR_STDOUT});
+        await this.write(`This is an interactive terminal: type a command and`, {color: COLOR_STDOUT});
+        await this.write(`press Enter. Tab completes names. Try these:`, {color: COLOR_STDOUT});
+        await this.write([
+            {text: `  resume   `, color: COLOR_HEADING},
+            {text: `read my resume`, color: COLOR_STDOUT}
+        ]);
+        await this.write([
+            {text: `  about    `, color: COLOR_HEADING},
+            {text: `about this site`, color: COLOR_STDOUT}
+        ]);
+        await this.write([
+            {text: `  contact  `, color: COLOR_HEADING},
+            {text: `how to reach me`, color: COLOR_STDOUT}
+        ]);
+        await this.write(`Type 'help' for more commands.`, {color: COLOR_STDOUT});
+        await this.write(``, {color: COLOR_STDOUT});
+
         // `?run=<command>` lets a URL auto-type and auto-execute a command on load
         if (params.has("run")) {
             const command = params.get("run");
