@@ -239,8 +239,6 @@ test("parentheses override precedence", async () => {
 });
 
 test("comparisons print 1 or 0 and set the exit status", async () => {
-    // Note: '<' and '>' are left out on purpose. The shell currently treats a
-    // quoted '>' or '<' after another word as a redirect, before expr runs.
     assertEqual(await out("expr 5 '>=' 3"), "1");
     assertEqual((await run("expr 5 '>=' 3")).exitCode, 0);
     assertEqual(await out("expr 3 = 4"), "0");
@@ -272,15 +270,12 @@ for (const name of ["cut", "tee", "xargs", "seq", "basename", "dirname", "sleep"
 
 describe("the self-test script (.script.sh) covers the new commands");
 
-test("every new section of .script.sh passes", async () => {
+test("the whole .script.sh self-test passes, including the new sections", async () => {
     const r = await run("sh .script.sh");
-    const start = r.stdout.indexOf("[TEST] cut");
-    const end = r.stdout.indexOf("[TEST] Locked network recon commands");
-    assert(start !== -1 && end !== -1 && end > start, "new sections should be present in the script output");
-    const section = r.stdout.slice(start, end);
-    assert(!section.includes("FAIL"), "a check in the new .script.sh sections failed:\n" + section);
-    assertIncludes(section, "PASS: expr precedence");
-    assertIncludes(section, "PASS: xargs -I substitution");
+    assert(!r.stdout.includes("FAIL"), "a check in .script.sh failed:\n" + r.stdout.split("\n").filter(l => l.includes("FAIL")).join("\n"));
+    assertIncludes(r.stdout, "PASS: expr precedence");
+    assertIncludes(r.stdout, "PASS: xargs -I substitution");
+    assertIncludes(r.stdout, "All tests passed!");
 });
 
 })();

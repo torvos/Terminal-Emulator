@@ -636,6 +636,12 @@ Object.assign(TerminalEngine.prototype, {
         // Longest-operator-first, so "2>>"/"2>" aren't mistaken for a
         // trailing ">"/">>" starting one character later.
         const OPERATORS = ["2>>", "2>", ">>", ">", "<"];
+        // Real operators are replaced with this private-use marker plus an index
+        // into `operatorMarks` before tokenizing. Tokenizing dequotes text, so a
+        // quoted '>' ends up as the plain token ">" and would otherwise be
+        // mistaken for a redirect. The marker can't come from user input.
+        const OP_MARK = "\uE100";
+        const operatorMarks = [];
         const masked = this.maskQuotes(command);
 
         // Walk the string once, copying it through unchanged EXCEPT that
@@ -650,7 +656,8 @@ Object.assign(TerminalEngine.prototype, {
         for (let i = 0; i < command.length; ) {
             const op = OPERATORS.find(candidate => masked.startsWith(candidate, i));
             if (op) {
-                spaced += ` ${op} `;
+                operatorMarks.push(op);
+                spaced += ` ${OP_MARK}${operatorMarks.length - 1} `;
                 i += op.length;
             } else {
                 spaced += command[i];
@@ -664,12 +671,14 @@ Object.assign(TerminalEngine.prototype, {
 
         for (let i = 0; i < tokens.length; i++) {
             const token = tokens[i];
-            if (OPERATORS.includes(token) && tokens[i + 1] !== undefined) {
-                redirects.push({ operator: token, target: tokens[i + 1] });
+            const markIndex = token.startsWith(OP_MARK) ? Number(token.slice(OP_MARK.length)) : NaN;
+            if (Number.isInteger(markIndex) && tokens[i + 1] !== undefined) {
+                redirects.push({ operator: operatorMarks[markIndex], target: tokens[i + 1] });
                 i++; // consume the target too, it's not a plain argument
                 continue;
             }
-            remaining.push(token);
+            // A marked operator with no target after it stays a plain word, as before
+            remaining.push(Number.isInteger(markIndex) ? operatorMarks[markIndex] : token);
         }
 
         return {
