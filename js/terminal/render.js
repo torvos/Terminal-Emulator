@@ -40,14 +40,127 @@ Object.assign(TerminalEngine.prototype, {
 
     // Clears all terminal output (used by the `clear`/`reset` commands).
     clearScreen() {
-        this.output.innerHTML = "";
+        this.output.replaceChildren();
+    },
+
+    /**
+     * Finds the http(s) URLs and email addresses in a piece of plain text
+     * and splits it into an ordered list of parts:
+     *   { type: "text",  text }
+     *   { type: "url",   text, href }
+     *   { type: "email", text, href }
+     * Joining every part's `text` back together always reproduces the
+     * input exactly - nothing is added, dropped, or escaped here.
+     *
+     * This is pure string work with no DOM access, so it is safe to call
+     * anywhere (and to unit-test in Node). It never produces markup:
+     * write() turns the parts into real DOM nodes, so the text of a link
+     * can never be parsed as HTML no matter what it contains.
+     *
+     * Rules:
+     *   - URLs and emails are found in ONE left-to-right pass, so an
+     *     address inside a URL ("https://user@example.com/") stays part
+     *     of that URL instead of being linked a second time.
+     *   - Only http: and https: URLs that the browser's own URL parser
+     *     accepts become links. Anything else stays plain text.
+     *   - Sentence punctuation right after a URL ("see https://x.com.")
+     *     and a closing bracket/quote that was opened BEFORE the URL
+     *     ("(https://x.com)") are left out of the link. A bracket that
+     *     is balanced inside the URL ("/wiki/Rust_(language)") is kept.
+     *
+     * @param {string} text - Plain text to scan.
+     * @returns {Array<{type: string, text: string, href?: string}>}
+     */
+    findLinks(text) {
+        const source = String(text ?? "");
+        const parts = [];
+        const pushText = (str) => {
+            if (!str) return;
+            const last = parts[parts.length - 1];
+            if (last && last.type === "text") {
+                last.text += str;
+            } else {
+                parts.push({ type: "text", text: str });
+            }
+        };
+
+        // Group 1: a URL. Stops at whitespace and at the characters that
+        // can't appear raw in a URL and usually delimit one in prose.
+        // Group 2: an email address (same shape as before).
+        const pattern = /\b(https?:\/\/[^\s<>"`]+)|([A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})(?![A-Za-z0-9])/gi;
+
+        const CLOSERS = { ")": "(", "]": "[", "}": "{" };
+        const count = (str, ch) => str.split(ch).length - 1;
+
+        // Removes trailing characters that belong to the surrounding
+        // sentence rather than to the URL itself.
+        const trimUrl = (url) => {
+            let end = url.length;
+            while (end > 0) {
+                const ch = url[end - 1];
+                if (".,;:!?'*".includes(ch)) {
+                    end--;
+                    continue;
+                }
+                if (CLOSERS[ch]) {
+                    const body = url.slice(0, end);
+                    // Keep the closer only if it has a matching opener
+                    // inside the URL.
+                    if (count(body, ch) > count(body, CLOSERS[ch])) {
+                        end--;
+                        continue;
+                    }
+                }
+                break;
+            }
+            return url.slice(0, end);
+        };
+
+        let cursor = 0;
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+            let linkText;
+            let part = null;
+
+            if (match[1] !== undefined) {
+                linkText = trimUrl(match[1]);
+                let parsed = null;
+                try {
+                    parsed = new URL(linkText);
+                } catch {
+                    parsed = null;
+                }
+                if (parsed && (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname) {
+                    // href is the browser-normalized form; the visible
+                    // text stays exactly what was printed.
+                    part = { type: "url", text: linkText, href: parsed.href };
+                }
+            } else {
+                linkText = match[2];
+                part = { type: "email", text: linkText, href: "mailto:" + encodeURI(linkText) };
+            }
+
+            pushText(source.slice(cursor, match.index));
+            if (part) {
+                parts.push(part);
+            } else {
+                pushText(linkText);
+            }
+            cursor = match.index + linkText.length;
+            // Resume scanning right after what was consumed, so trimmed
+            // punctuation is re-read as ordinary text.
+            pattern.lastIndex = Math.max(cursor, match.index + 1);
+        }
+        pushText(source.slice(cursor));
+        return parts;
     },
 
     /**
      * Appends a line of text to the terminal output.
-     * If a segment's text contains a URL or email address, it is HTML-escaped
-     * and those matches are turned into clickable <a> links; otherwise it's
-     * inserted as plain text (safe from HTML injection either way).
+     * URLs and email addresses in the text become clickable links (see
+     * findLinks() above). Everything is inserted as DOM text nodes and
+     * elements - never as an HTML string - so user/file content can't
+     * inject markup.
      *
      * Supports two calling styles:
      *   - Whole-line color (legacy, still works exactly as before):
@@ -69,39 +182,23 @@ Object.assign(TerminalEngine.prototype, {
     write(text, options = {}) {
         const div = document.createElement("div");
 
-        // Escapes special HTML characters so user/file content can't inject markup
-        const escapeHtml = (str) => str
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
-
-        // Detect http(s) URLs and email addresses so they can be linkified.
-        // This runs AFTER escapeHtml (see linkify below), so by this point
-        // any literal "<", ">", '"', "'" in the original text have already
-        // become "&lt;", "&gt;", "&quot;", "&#39;" sequences. Excluding
-        // those specific sequences (but still allowing a bare "&amp;" -
-        // i.e. a literal "&", which is extremely common in real URLs, e.g.
-        // query-string separators like "?a=1&b=2") stops the URL match
-        // right at that boundary, so a URL sitting hard up against such a
-        // character with no whitespace in between (e.g. "http://x.com<b>")
-        // doesn't have the escaped entity swallowed into its href.
-        const pattern1 = /\b(https?:\/\/(?:[^\s&]|&(?!lt;|gt;|quot;|#39;))+)/gi;
-        const pattern2 = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
-
-        // Escapes a chunk of text and turns any URLs/emails within it into
-        // clickable links. The escape happens first, so this is safe to
-        // drop into innerHTML even if the source text contains "<"/">"/etc.
-        const linkify = (str) => escapeHtml(str)
-            .replace(
-                pattern1,
-                '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
-            )
-            .replace(
-                pattern2,
-                '<a href="mailto:$&">$&</a>'
-            );
+        // Fills `span` with text nodes and <a> elements for one segment.
+        const appendLinked = (span, str) => {
+            for (const part of this.findLinks(str)) {
+                if (part.type === "text") {
+                    span.append(part.text);
+                    continue;
+                }
+                const a = document.createElement("a");
+                a.textContent = part.text;
+                a.href = part.href;
+                if (part.type === "url") {
+                    a.target = "_blank";
+                    a.rel = "noopener noreferrer";
+                }
+                span.append(a);
+            }
+        };
 
         // Normalize the input into a list of segments so both calling
         // styles above are handled identically below.
@@ -116,7 +213,7 @@ Object.assign(TerminalEngine.prototype, {
             wroteContent = true;
 
             const span = document.createElement("span");
-            span.innerHTML = linkify(segmentText);
+            appendLinked(span, String(segmentText));
             // Set via the style property (not string-interpolated CSS) so a
             // segment's color can never break out of the element's markup.
             if (segment.color) {
@@ -128,7 +225,7 @@ Object.assign(TerminalEngine.prototype, {
         if (!wroteContent) {
             // No segments had any text: a non-breaking space keeps empty
             // lines from collapsing to zero height.
-            div.innerText = "\u00A0";
+            div.textContent = "\u00A0";
         }
 
         this.output.appendChild(div);
