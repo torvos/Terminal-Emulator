@@ -135,6 +135,29 @@
      * @param {*} tree
      * @returns {boolean}
      */
+    /**
+     * Measures how much of the filesystem's size budget a node uses
+     * (including everything under it, for a directory):
+     *   chars - content of every file, target of every symlink, and the
+     *           name of every child entry
+     *   nodes - the node itself plus every node under it
+     * See the FS_MAX_* constants in constants.js for what these are
+     * compared against.
+     */
+    function measureNode(node, totals = { chars: 0, nodes: 0 }) {
+        if (!node) return totals;
+        totals.nodes++;
+        if (typeof node.content === "string") totals.chars += node.content.length;
+        if (typeof node.target === "string") totals.chars += node.target.length;
+        if (node.children) {
+            for (const name of Object.keys(node.children)) {
+                totals.chars += name.length;
+                measureNode(node.children[name], totals);
+            }
+        }
+        return totals;
+    }
+
     function isValidFileSystemTree(tree) {
         if (!isPlainObject(tree)) return false;
         const root = tree[ROOT];
@@ -489,8 +512,9 @@
          * @param {Object} [options]
          * @param {boolean} [options.append=false] - Append instead of overwrite (files only).
          * @param {string} [options.cwd="/"] - Working directory, when pathOrNode is a path string.
-         * @returns {boolean} true on success, false if the node is missing
-         *   or the device refused the write (e.g. /dev/full).
+         * @returns {boolean} true on success, false if the node is missing,
+         *   the device refused the write (e.g. /dev/full), or the write
+         *   would grow the file past the size limits in constants.js.
          */
         writeContent(pathOrNode, data, options = {}) {
             const node = typeof pathOrNode === "string"
@@ -506,6 +530,7 @@
                 return ok;
             }
 
+            let next;
             if (options.append) {
                 // A real shell's `>>` writes a command's ACTUAL stdout bytes
                 // - trailing newline included, since that's just part of
@@ -524,12 +549,23 @@
                 // actually being added.
                 const existing = node.content ?? "";
                 const addition = data ?? "";
-                node.content = existing && addition && !existing.endsWith("\n")
+                next = existing && addition && !existing.endsWith("\n")
                     ? existing + "\n" + addition
                     : existing + addition;
             } else {
-                node.content = data ?? "";
+                next = String(data ?? "");
             }
+
+            // Size limits (see FS_MAX_* in constants.js). A write that
+            // leaves the file the same size or smaller is always allowed,
+            // so a full filesystem can still be emptied out.
+            const previousLength = (node.content ?? "").length;
+            if (next.length > previousLength) {
+                if (next.length > FS_MAX_FILE_CHARS) return false;
+                const used = measureNode(FileSystem[ROOT]).chars;
+                if (used - previousLength + next.length > FS_MAX_TOTAL_CHARS) return false;
+            }
+            node.content = next;
             node.modified = Date.now();
             return true;
         },
@@ -610,6 +646,47 @@
                 node = node.children[part];
             }
             return node;
+        },
+
+        /**
+         * Current size of the whole filesystem, in the units the FS_MAX_*
+         * limits in constants.js use.
+         * @returns {{chars: number, nodes: number}}
+         */
+        usage() {
+            return measureNode(FileSystem[ROOT]);
+        },
+
+        /**
+         * Checks that a name is short enough to be used for a new entry.
+         * @param {string} name - The entry's name (last path segment).
+         * @returns {string|null} null if fine, otherwise an error message.
+         */
+        checkName(name) {
+            return String(name).length > FS_MAX_NAME_LENGTH ? "File name too long" : null;
+        },
+
+        /**
+         * Checks whether a NEW entry called `name` holding `node` (a file,
+         * link, or a whole directory tree, e.g. from `cp -r`) can be added
+         * without going over the filesystem's size limits. Call this
+         * BEFORE attaching the node to its parent's `children`.
+         * @param {string} name - The new entry's name (last path segment).
+         * @param {Object} [node] - The node about to be added. Omit for a
+         *   new empty file or directory.
+         * @returns {string|null} null if it fits, otherwise an error
+         *   message ("File name too long" / "No space left on device").
+         */
+        checkSpace(name, node = null) {
+            const nameError = this.checkName(name);
+            if (nameError) return nameError;
+            const used = measureNode(FileSystem[ROOT]);
+            const added = node ? measureNode(node) : { chars: 0, nodes: 1 };
+            if (used.nodes + added.nodes > FS_MAX_NODES ||
+                used.chars + added.chars + String(name).length > FS_MAX_TOTAL_CHARS) {
+                return "No space left on device";
+            }
+            return null;
         },
 
         // Attaches `node` as a new top-level child of root under `name`

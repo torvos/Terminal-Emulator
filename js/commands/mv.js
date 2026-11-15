@@ -105,6 +105,12 @@ registerCommand("mv", {
                 return `mv: ${destPath}: already exists`;
             }
 
+            // A move adds nothing new, so only the new name needs checking.
+            const nameError = terminal.fs.checkName(dest.name);
+            if (nameError) {
+                return `mv: ${destPath}: ${nameError}`;
+            }
+
             src.parent.modified = Date.now();
             dest.parent.modified = Date.now();
 

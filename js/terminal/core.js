@@ -116,33 +116,36 @@ class TerminalEngine {
                 settingsWereCorrupted = true;
             }
 
+            // Valid JSON isn't necessarily a valid settings object (e.g.
+            // `null`, a number, an array) - treat that as corrupted too.
+            if (!settingsWereCorrupted &&
+                (typeof settings !== "object" || settings === null || Array.isArray(settings))) {
+                localStorage.removeItem(STORAGE_KEY_SETTINGS);
+                settings = null;
+                settingsWereCorrupted = true;
+            }
+
             if (settings) {
                 // Note: there's no version check/wipe here anymore. A
                 // saved session from an older TERMINAL_VERSION is merged
-                // on top of today's defaults the same way any saved
-                // session is (see the `??`/spread fallbacks below), and
-                // any seed CONTENT that changed between versions is
-                // reconciled file-by-file below via reconcileSeed() -
-                // there's nothing left that a full wipe was uniquely
-                // necessary for.
-                this.history = settings.history ?? [];
-                this.historyIndex = settings.historyIndex ?? -1;
-                this.cursorPos = settings.cursorPos ?? 0;
-                this.hasbooted = settings.hasbooted ?? 0;
-                this.cwd = settings.cwd ?? HOME;
-                this.seedSync = settings.seedSync ?? {};
+                // on top of today's defaults, and any seed CONTENT that
+                // changed between versions is reconciled file-by-file
+                // below via reconcileSeed().
+                //
+                // Nothing read from storage is trusted as-is: every field
+                // is type-checked by sanitizeSettings() first, and a field
+                // that fails falls back to its default.
+                const clean = this.sanitizeSettings(settings);
+                this.history = clean.history;
+                this.historyIndex = clean.historyIndex;
+                this.hasbooted = clean.hasbooted;
+                this.cwd = clean.cwd;
+                this.seedSync = clean.seedSync;
 
                 // Merge saved env/aliases on top of the defaults so new default
                 // keys introduced in later versions still show up.
-                this.env = {
-                    ...this.env,
-                    ...(settings.env ?? {})
-                };
-
-                this.aliases = {
-                    ...this.aliases,
-                    ...(settings.aliases ?? {})
-                };
+                this.env = { ...this.env, ...clean.env };
+                this.aliases = { ...this.aliases, ...clean.aliases };
             }
         }
 
@@ -167,6 +170,15 @@ class TerminalEngine {
         // user had edited or deleted them; everything else is untouched).
         const { seedSync, changes: seedChanges } = FileSystemAPI.reconcileSeed(this.seedSync);
         this.seedSync = seedSync;
+
+        // The saved working directory has to still exist as a directory in
+        // the filesystem that was actually restored (the two are saved
+        // separately, so they can disagree). If it doesn't, start from
+        // home - or from / if home itself was deleted.
+        if (!this.fs.isDirectory(this.cwd, ROOT)) {
+            this.cwd = this.fs.isDirectory(HOME, ROOT) ? HOME : ROOT;
+        }
+        this.env.PWD = this.cwd;
 
         const params = new URLSearchParams(window.location.search);
         await this.write(`Torvos v${this.version}`, {color: "#c707ce"});
@@ -258,6 +270,88 @@ class TerminalEngine {
         // fsDirty this turn.
         this.saveSettings({ forceFs: true });
         this.hiddenInput.focus();
+    }
+
+    /**
+     * Turns whatever was parsed out of the saved-settings JSON into a
+     * settings object that is safe to use: every field is checked for the
+     * right type and a sensible size, and anything that fails is replaced
+     * by its default (or, inside a list/map, just that one entry is
+     * dropped). Never throws, whatever it is given.
+     *
+     * The settings come from localStorage, which the visitor - or any
+     * script that ever ran on this origin - can edit freely, so they are
+     * treated as untrusted input, the same way FileSystemAPI.restore()
+     * treats the saved filesystem.
+     *
+     * Note: `cwd` is only checked for being a plausible path here. Whether
+     * it actually exists is checked in init(), once the filesystem has
+     * been restored.
+     *
+     * @param {*} raw - The parsed JSON value.
+     * @returns {{history: string[], historyIndex: number, hasbooted: number,
+     *   cwd: string, seedSync: Object, env: Object, aliases: Object}}
+     */
+    sanitizeSettings(raw) {
+        const isPlainObject = (value) =>
+            typeof value === "object" && value !== null && !Array.isArray(value);
+        const source = isPlainObject(raw) ? raw : {};
+
+        // Names that must never become keys of env/aliases/seedSync.
+        const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+        // Keeps only string -> string entries with safe, reasonably sized
+        // keys and values (used for both env and aliases).
+        const cleanStringMap = (value) => {
+            const result = {};
+            if (!isPlainObject(value)) return result;
+            let kept = 0;
+            for (const [key, entry] of Object.entries(value)) {
+                if (kept >= MAX_SETTINGS_ENTRIES) break;
+                if (key === "" || key.length > FS_MAX_NAME_LENGTH || UNSAFE_KEYS.has(key)) continue;
+                if (typeof entry !== "string" || entry.length > MAX_SETTINGS_VALUE_CHARS) continue;
+                result[key] = entry;
+                kept++;
+            }
+            return result;
+        };
+
+        const history = Array.isArray(source.history)
+            ? source.history
+                .filter(entry => typeof entry === "string" && entry !== "" && entry.length <= MAX_HISTORY_ENTRY_CHARS)
+                .slice(-MAX_HISTORY)
+            : [];
+
+        const historyIndex =
+            Number.isInteger(source.historyIndex) &&
+            source.historyIndex >= -1 &&
+            source.historyIndex <= history.length
+                ? source.historyIndex
+                : history.length;
+
+        const cwd =
+            typeof source.cwd === "string" && source.cwd.startsWith(ROOT) && source.cwd.length <= 4096
+                ? source.cwd
+                : HOME;
+
+        const seedSync = {};
+        if (isPlainObject(source.seedSync)) {
+            for (const [path, version] of Object.entries(source.seedSync)) {
+                if (UNSAFE_KEYS.has(path) || !path.startsWith(ROOT)) continue;
+                if (!Number.isFinite(version)) continue;
+                seedSync[path] = version;
+            }
+        }
+
+        return {
+            history,
+            historyIndex,
+            hasbooted: source.hasbooted === 1 ? 1 : 0,
+            cwd,
+            seedSync,
+            env: cleanStringMap(source.env),
+            aliases: cleanStringMap(source.aliases)
+        };
     }
 
     /**

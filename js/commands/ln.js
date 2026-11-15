@@ -89,9 +89,19 @@ registerCommand("ln", {
                     };           
                 }
 
+                const newLink = terminal.fs.createLink(targetPath);
+                const spaceError = terminal.fs.checkSpace(result.name, newLink);
+                if (spaceError) {
+                    return {
+                        stdout: "",
+                        stderr: `ln: ${link}: ${spaceError}`,
+                        exitCode: EXIT_FAILURE
+                    };
+                }
+
                 result.parent.modified = Date.now();
                 // Store the link pointing at the target's resolved absolute path
-                result.parent.children[result.name] = terminal.fs.createLink(targetPath);
+                result.parent.children[result.name] = newLink;
             }
             else{
                 return {

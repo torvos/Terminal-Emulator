@@ -64,6 +64,10 @@ registerCommand("mkdir", {
                 if (!result) {
                     return `mkdir: invalid path ${currentPath}`;
                 }
+                const spaceError = terminal.fs.checkSpace(result.name);
+                if (spaceError) {
+                    return `mkdir: ${currentPath}: ${spaceError}`;
+                }
                 result.parent.modified = Date.now();
                 result.parent.children[result.name] = terminal.fs.createDirectory(result.name.startsWith("."));
             }
@@ -94,6 +98,11 @@ registerCommand("mkdir", {
             if (!result) {
                 // Immediate parent directory doesn't exist and -p wasn't given
                 return `mkdir: cannot create directory '${target}': No such file or directory`;
+            }
+
+            const spaceError = terminal.fs.checkSpace(result.name);
+            if (spaceError) {
+                return `mkdir: ${target}: ${spaceError}`;
             }
 
             result.parent.modified = Date.now();

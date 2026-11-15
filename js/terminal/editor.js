@@ -34,22 +34,38 @@ Object.assign(TerminalEngine.prototype, {
                 this.editorEl.value.length
             );
         });
-        document.getElementById("editor-header").textContent = `Editing: ${path} | Ctrl+S Save | Ctrl+X Save & Exit | Esc Exit`;
+        document.getElementById("editor-header").textContent = this.editorHeaderText(path);
     },
 
     /**
      * Writes the editor textarea's current contents back to the file node
      * and persists the updated filesystem, without closing the editor.
+     * @returns {boolean|undefined} false if the file was too large to
+     *   save, true if it was saved, undefined if the editor isn't open.
      */
     saveEditor() {
         if (!this.editor.active){
             return;
         }
-        this.editor.node.content = this.editorEl.value;
-        this.editor.node.modified = Date.now();
+        const header = document.getElementById("editor-header");
+        const wrote = this.fs.writeContent(this.editor.node, this.editorEl.value);
+        if (!wrote) {
+            // Too big for the filesystem's size limits (see FS_MAX_* in
+            // constants.js). Nothing was written; the text stays in the
+            // editor so it can be shortened and saved again.
+            header.textContent = `Editing: ${this.editor.path} | NOT SAVED: No space left on device - shorten the file and save again | Esc Exit without saving`;
+            return false;
+        }
+        header.textContent = this.editorHeaderText(this.editor.path);
         this.fsDirty = true;
         this.saveSettings();
         this.editor.modified = false;
+        return true;
+    },
+
+    // The editor's normal one-line header (file path + key hints).
+    editorHeaderText(path) {
+        return `Editing: ${path} | Ctrl+S Save | Ctrl+X Save & Exit | Esc Exit`;
     },
 
     /**
@@ -60,8 +76,10 @@ Object.assign(TerminalEngine.prototype, {
         if (!this.editor.active){
             return;
         }
-        if (save){
-            this.saveEditor();
+        if (save && this.saveEditor() === false){
+            // The save failed - stay in the editor rather than closing
+            // and losing the text.
+            return;
         }
         this.editor.active = false;
         this.editor.node = null;

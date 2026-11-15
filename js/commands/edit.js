@@ -44,6 +44,14 @@ registerCommand("edit", {
                     exitCode: EXIT_FAILURE
                 };
             }
+            const spaceError = terminal.fs.checkSpace(result.name);
+            if (spaceError) {
+                return {
+                    stdout: "",
+                    stderr: `edit: ${target}: ${spaceError}`,
+                    exitCode: EXIT_FAILURE
+                };
+            }
             result.parent.children[result.name] = terminal.fs.createFile(result.name.startsWith("."));
             node = result.parent.children[result.name];        
         } else {

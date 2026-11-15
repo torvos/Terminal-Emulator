@@ -96,6 +96,11 @@ registerCommand("cp", {
                 return `cp: ${destPath}: already exists`;
             }
 
+            const spaceError = terminal.fs.checkSpace(dest.name, src.parent.children[src.name]);
+            if (spaceError) {
+                return `cp: ${destPath}: ${spaceError}`;
+            }
+
             src.parent.modified = Date.now();
             dest.parent.modified = Date.now();
 

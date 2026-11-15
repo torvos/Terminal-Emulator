@@ -118,9 +118,13 @@ Object.assign(TerminalEngine.prototype, {
             if (typeof redirectReturn === "string") {
                 result.stderr = redirectReturn;
                 result.exitCode = EXIT_FAILURE;
-            } else {
-                result.stdout = "";
             }
+            // The output was sent to the file either way. If the write
+            // failed (file too large, no space, permission denied) the
+            // output is lost, as in a real shell - it must not fall
+            // through and be printed to the screen instead.
+            result.stdout = "";
+            result.stdoutSegments = undefined;
         }
         if (stderrRedirect) {
             const redirectReturn = this.writeRedirect(
@@ -662,6 +666,10 @@ Object.assign(TerminalEngine.prototype, {
             const parent = this.fs.getParent(path, this.cwd);
             if (!parent || !this.fs.isDirectory(parent.parent)) {
                 return `Invalid parent directory`;
+            }
+            const spaceError = this.fs.checkSpace(parent.name);
+            if (spaceError) {
+                return spaceError;
             }
             parent.parent.children[parent.name] = this.fs.createFile(parent.name.startsWith("."));
             node = parent.parent.children[parent.name];

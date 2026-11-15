@@ -51,6 +51,28 @@ const PAGER_SCROLL_DELAY_MS = 20;   // delay between each line when less/more sc
 const STORAGE_KEY_SETTINGS = "terminalSettings";
 const STORAGE_KEY_FILESYSTEM = "FileSystem";
 
+// Size limits for the virtual filesystem. The whole tree is saved to
+// localStorage as one JSON string, and browsers allow roughly 5 million
+// characters per site there, so the filesystem has to stay well under
+// that or saving stops working. Sizes are counted in JavaScript string
+// characters (the unit localStorage itself counts in), not bytes. The
+// total is kept low enough that even content made entirely of characters
+// JSON has to write as six-character escapes still fits.
+// Enforced by FileSystemAPI.writeContent() and FileSystemAPI.checkSpace()
+// in js/filesystem/fileapi.js.
+const FS_MAX_FILE_CHARS = 250000;   // one file's content
+const FS_MAX_TOTAL_CHARS = 750000;  // all content + names + link targets together
+const FS_MAX_NODES = 2000;          // files + directories + links + devices
+const FS_MAX_NAME_LENGTH = 255;     // one file/directory name
+
+// Limits applied to the saved session settings (history, env, aliases)
+// when they are saved and when they are read back at boot - see
+// sanitizeSettings() in js/terminal/core.js.
+const MAX_HISTORY = 1000;               // number of remembered commands
+const MAX_HISTORY_ENTRY_CHARS = 4096;   // longer commands still run, but aren't remembered
+const MAX_SETTINGS_ENTRIES = 500;       // env variables / aliases restored from storage
+const MAX_SETTINGS_VALUE_CHARS = 65536; // one env/alias value restored from storage
+
 // Aliases every session starts with. The three site shortcuts use absolute
 // paths so they work from any working directory. User-defined/saved aliases
 // are merged on top of these at boot (see TerminalEngine.init() in core.js).

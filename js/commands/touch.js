@@ -58,6 +58,11 @@ registerCommand("touch", {
                 return `touch: invalid path ${target}`;
             }
 
+            const spaceError = terminal.fs.checkSpace(result.name);
+            if (spaceError) {
+                return `touch: ${target}: ${spaceError}`;
+            }
+
             result.parent.modified = Date.now();
             result.parent.children[result.name] = terminal.fs.createFile(result.name.startsWith("."));
             return null;

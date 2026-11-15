@@ -459,9 +459,13 @@ Object.assign(TerminalEngine.prototype, {
                 }
 
                 if (!historyExpansionFailed) {
-                    // Record the command in history (capped to MAX_HISTORY entries)
-                    this.history.push(input);
-                    const MAX_HISTORY = 1000;
+                    // Record the command in history (capped to MAX_HISTORY
+                    // entries - see constants.js). Very long lines (e.g. a
+                    // huge paste) still run, but aren't remembered, so
+                    // history can't fill up browser storage.
+                    if (input.length <= MAX_HISTORY_ENTRY_CHARS) {
+                        this.history.push(input);
+                    }
                     if (this.history.length > MAX_HISTORY) {
                         this.history.shift();
                     }
