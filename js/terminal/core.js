@@ -7,6 +7,21 @@
  * persistence, and shared helper utilities used by other terminal/*.js
  * files (input.js, execute.js, parser.js, render.js, editor.js, bootstrap.js).
  */
+/**
+ * Thrown to stop whatever command is running when the user presses
+ * Ctrl+C (see requestInterrupt()/checkInterrupt() below). It unwinds out
+ * of the running command, through execute(), up to handleEnter() in
+ * input.js, which is the one place that catches it. Anything in between
+ * that catches errors must re-throw this one - see the catch blocks in
+ * execute.js.
+ */
+class TerminalInterrupt extends Error {
+    constructor() {
+        super("Interrupted");
+        this.name = "TerminalInterrupt";
+    }
+}
+
 class TerminalEngine {
 
     constructor() {
@@ -32,7 +47,19 @@ class TerminalEngine {
         this.cwd = HOME;                  // current working directory
         this.lastExpansionEmpty = false;  // set by parser when a glob/expansion matched nothing
         this.lastExitCode = EXIT_SUCCESS; // exit status of the last executed command
-        this.sessionStart = Date.now();   // when this page/tab session began (used by `neofetch`'s Uptime)
+        this.sessionStart = Date.now();
+
+        // True from the moment Enter starts a command until that command
+        // has completely finished. While it is set, typing is ignored and
+        // Enter can't start a second command on top of the first - see
+        // handleEnter() and the keydown handler in input.js.
+        this.busy = false;
+        // Set by Ctrl+C while a command is running; the command stops at
+        // its next checkInterrupt()/sleep(). Cleared when it has stopped.
+        this.interruptRequested = false;
+        // Cancel functions for delays currently being waited on, so an
+        // interrupt can end them immediately instead of waiting them out.
+        this._pendingDelays = new Set();   // when this page/tab session began (used by `neofetch`'s Uptime)
 
         // Wire up keyboard/DOM event listeners (defined in js/terminal/input.js)
         this.bindEvents();
@@ -517,10 +544,75 @@ class TerminalEngine {
     /**
      * Returns a Promise that resolves after the given delay.
      * Used to animate boot text / simulate latency for commands like ping.
+     * Ends early, by throwing TerminalInterrupt, if Ctrl+C is pressed
+     * while a command is running.
      * @param {number} ms - Milliseconds to wait.
      */
     sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        return this.interruptibleDelay(ms);
+    }
+
+    /**
+     * The real implementation behind sleep(). Kept separate so the `sleep`
+     * command can call it directly: the test harness replaces sleep() with
+     * a no-op to skip animation delays, which must not turn `sleep 2`
+     * itself into a no-op.
+     * @param {number} ms - Milliseconds to wait.
+     * @returns {Promise<void>} Resolves after the delay; rejects with
+     *   TerminalInterrupt if the running command is interrupted first.
+     */
+    interruptibleDelay(ms) {
+        if (this.interruptRequested) {
+            return Promise.reject(new TerminalInterrupt());
+        }
+        return new Promise((resolve, reject) => {
+            const cancel = () => {
+                clearTimeout(timer);
+                this._pendingDelays.delete(cancel);
+                reject(new TerminalInterrupt());
+            };
+            const timer = setTimeout(() => {
+                this._pendingDelays.delete(cancel);
+                resolve();
+            }, ms);
+            this._pendingDelays.add(cancel);
+        });
+    }
+
+    /**
+     * Stops the running command if Ctrl+C has been pressed, by throwing
+     * TerminalInterrupt. Called at the points where it is safe to stop:
+     * before each command in a pipeline, before each printed line, and on
+     * every loop iteration of a script. Does nothing otherwise.
+     */
+    checkInterrupt() {
+        if (this.interruptRequested) {
+            throw new TerminalInterrupt();
+        }
+    }
+
+    /**
+     * Asks the running command to stop (Ctrl+C). Ends any delay it is
+     * waiting on and closes a "--More--" pager prompt if one is open, so
+     * the command reaches a checkInterrupt() right away.
+     * @returns {boolean} true if a command was running, false if there
+     *   was nothing to interrupt.
+     */
+    requestInterrupt() {
+        if (!this.busy) {
+            return false;
+        }
+        this.interruptRequested = true;
+        for (const cancel of [...this._pendingDelays]) {
+            cancel();
+        }
+        if (this.pager.active) {
+            this.output.lastChild?.remove(); // the "--More--" line
+            this.pager.active = false;
+            this.pager.linesPrinted = 0;
+            this.pager.resolver(false);
+        }
+        return true;
     }
 
     /**

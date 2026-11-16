@@ -34,6 +34,7 @@ const EXIT_SUCCESS = 0;
 const EXIT_FAILURE = 1;
 const EXIT_SYNTAX_ERROR = 2;       // shell-level syntax error (e.g. an unterminated quote)
 const EXIT_COMMAND_NOT_FOUND = 127;
+const EXIT_INTERRUPTED = 130;        // stopped by Ctrl+C (128 + SIGINT, as in a real shell)
 const EXIT_NOT_EXECUTABLE = 126;    // found but not runnable (a directory, non-regular file, or missing the execute bit)
 
 // Ownership - the two "users" any file/directory can be owned by in this
@@ -43,7 +44,16 @@ const SYSTEM_USER = "root";
 
 // Output timing (milliseconds), used by the "typewriter" animation effect
 const LINE_PRINT_DELAY_MS = 50;     // delay between each printed line of command output
-const PAGER_SCROLL_DELAY_MS = 20;   // delay between each line when less/more scroll
+const PAGER_SCROLL_DELAY_MS = 20;
+// Upper bound on how long one command's output is animated for. Output
+// short enough to fit (up to MAX_OUTPUT_ANIMATION_MS / LINE_PRINT_DELAY_MS
+// lines) still prints at LINE_PRINT_DELAY_MS per line; longer output is
+// sped up so the whole thing takes about this long instead of growing
+// without limit. See execute() in js/terminal/execute.js.
+const MAX_OUTPUT_ANIMATION_MS = 3000;
+// Smallest pause worth taking between output lines (roughly one screen
+// frame). Faster output is printed several lines per pause instead.
+const MIN_OUTPUT_PAUSE_MS = 16;   // delay between each line when less/more scroll
 
 // localStorage keys used to persist a session across reloads - kept in one
 // place so core.js (save/restore) and input.js (the `reset` command) can't

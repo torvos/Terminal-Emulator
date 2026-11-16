@@ -427,7 +427,11 @@
 
     // Periodically yields to the event loop during long-running loops so
     // the browser tab doesn't lock up / become unresponsive mid-script.
-    async function maybeYield(iteration) {
+    // Also where a looping script notices Ctrl+C: the check runs on every
+    // iteration, and the periodic yield is what gives the browser a
+    // chance to deliver the key press in the first place.
+    async function maybeYield(terminal, iteration) {
+        terminal.checkInterrupt();
         if (iteration % 200 === 0) {
             await new Promise(resolve => setTimeout(resolve, 0));
         }
@@ -482,7 +486,7 @@
                         terminal.write(terminal.formatErrorLine("sh: while loop exceeded maximum iteration limit"));
                         break;
                     }
-                    await maybeYield(iterations);
+                    await maybeYield(terminal, iterations);
                     const signal = await runStatements(terminal, stmt.body);
                     if (signal === "break") break;
                     // Note: "continue" signals simply fall through here since
@@ -498,7 +502,7 @@
                         terminal.write(terminal.formatErrorLine("sh: for loop exceeded maximum iteration limit"));
                         break;
                     }
-                    await maybeYield(i);
+                    await maybeYield(terminal, i);
                     terminal.env[stmt.varName] = items[i];
                     const signal = await runStatements(terminal, stmt.body);
                     if (signal === "break") break;

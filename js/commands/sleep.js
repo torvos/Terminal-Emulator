@@ -52,7 +52,9 @@ registerCommand("sleep", {
             };
         }
 
-        await new Promise(resolve => setTimeout(resolve, seconds * 1000));
+        // Ends early (by throwing) if Ctrl+C is pressed - see
+        // interruptibleDelay() in js/terminal/core.js.
+        await terminal.interruptibleDelay(seconds * 1000);
         return { stdout: "", stderr: "", exitCode: EXIT_SUCCESS };
     }
 });

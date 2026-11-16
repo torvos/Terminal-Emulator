@@ -105,6 +105,13 @@ Object.assign(TerminalEngine.prototype, {
             if (this.pager.active) {
                 e.preventDefault();
 
+                // Ctrl+C at a "--More--" prompt stops the command outright
+                // (requestInterrupt() also closes the prompt).
+                if (e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "c") {
+                    this.requestInterrupt();
+                    return;
+                }
+
                 if (e.key === " " || e.key === "Enter") {
                     this.output.lastChild.remove(); // remove the "--More--" line
                     this.pager.active = false;
@@ -132,6 +139,23 @@ Object.assign(TerminalEngine.prototype, {
             }
 
             // Readline-style Ctrl+<key> shortcuts (Ctrl+C, Ctrl+L, Ctrl+A, etc.)
+            // A command is still running. Ctrl+C stops it; every other key
+            // is ignored until it finishes, so nothing typed in the
+            // meantime can pile up or start a second command on top of
+            // the first. (Cmd+key browser shortcuts on macOS are left
+            // alone.)
+            if (this.busy) {
+                if (e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "c") {
+                    e.preventDefault();
+                    this.requestInterrupt();
+                    return;
+                }
+                if (!e.metaKey) {
+                    e.preventDefault();
+                }
+                return;
+            }
+
             if (e.ctrlKey && !e.metaKey && !e.altKey) {
                 switch (e.key.toLowerCase()) {
                     case "c": // Ctrl+C: cancel the current input line
@@ -274,6 +298,11 @@ Object.assign(TerminalEngine.prototype, {
         // multi-line paste into a single line, like a real terminal would
         // otherwise try to "run" each line) and inserts it at the cursor.
         this.hiddenInput.addEventListener("paste", (e) => {
+            if (this.busy) {
+                // Nothing can be typed while a command is running
+                e.preventDefault();
+                return;
+            }
             if (this.inputMode !== INPUT_NORMAL || this.pager.active) {
                 return;
             }
@@ -299,6 +328,13 @@ Object.assign(TerminalEngine.prototype, {
         // these cases - by the time this fires, our preventDefault() calls
         // above mean it only runs for edits WE didn't already apply.
         this.hiddenInput.addEventListener("input", () => {
+            if (this.busy) {
+                // Text that arrives this way while a command is running
+                // (mobile keyboards, dictation) is thrown away, the same
+                // as key presses are.
+                this.hiddenInput.value = "";
+                return;
+            }
             if (this.inputMode === INPUT_WAIT_FOR_PASSWORD ||
                 this.inputMode === INPUT_EDITOR ||
                 this.pager.active) {
@@ -316,10 +352,22 @@ Object.assign(TerminalEngine.prototype, {
         if (mobileTabBtn) {
             mobileTabBtn.addEventListener("mousedown", (e) => e.preventDefault());
             mobileTabBtn.addEventListener("click", () => {
-                if (this.inputMode !== INPUT_NORMAL) return;
+                if (this.inputMode !== INPUT_NORMAL || this.busy) return;
                 this.autocomplete();
                 this.syncHiddenInput();
                 this.renderInput();
+                this.hiddenInput.focus();
+            });
+        }
+
+        // Touch keyboards have no Ctrl key, so this button is the only way
+        // to stop a running command on a phone. Only shown while a
+        // command is running (see body.command-running in terminal.css).
+        const mobileStopBtn = document.getElementById("mobile-stop-btn");
+        if (mobileStopBtn) {
+            mobileStopBtn.addEventListener("mousedown", (e) => e.preventDefault());
+            mobileStopBtn.addEventListener("click", () => {
+                this.requestInterrupt();
                 this.hiddenInput.focus();
             });
         }
@@ -425,6 +473,11 @@ Object.assign(TerminalEngine.prototype, {
     },
 
     async handleEnter() {
+        // One command at a time: Enter does nothing while the previous
+        // command is still running.
+        if (this.busy) {
+            return;
+        }
         let input = this.currentInput.trim();
 
         switch (this.inputMode) {
@@ -472,14 +525,36 @@ Object.assign(TerminalEngine.prototype, {
                     this.historyIndex = this.history.length;
                     this.write(`${DEFAULT_USER}@${HOSTNAME}:${this.cwd}$ ${input}`);
 
-                    // Hide the live input line while the command runs, then restore it
+                    // Hide the live input line while the command runs, then
+                    // restore it. `busy` blocks typing and Enter for the
+                    // same period (see the keydown handler above).
                     document.getElementById("input-line").classList.add("hidden");
+                    document.body?.classList.add("command-running");
+                    this.busy = true;
+                    this.interruptRequested = false;
                     try {
                         await this.execute(input);
+                    } catch (err) {
+                        if (err instanceof TerminalInterrupt) {
+                            // Ctrl+C: the command has stopped
+                            this.write("^C");
+                            this.lastExitCode = EXIT_INTERRUPTED;
+                        } else {
+                            // A bug in a command or in the shell itself.
+                            // Report it and carry on, rather than leaving
+                            // the terminal stuck half-way through a command.
+                            console.error("Torvos: command failed unexpectedly", err);
+                            this.write(this.formatErrorLine(`shell: internal error: ${err?.message ?? err}`));
+                            this.lastExitCode = EXIT_FAILURE;
+                        }
                     } finally {
+                        this.busy = false;
+                        this.interruptRequested = false;
+                        document.body?.classList.remove("command-running");
                         document.getElementById("input-line").classList.remove("hidden");
                     }
                 }
+
                 this.hiddenInput.focus();
                 this.currentInput = "";
                 this.renderInput();

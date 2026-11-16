@@ -170,4 +170,15 @@ body {
     body.editor-mode #mobile-tab-btn{
         display:none;
     }
+
+    /* Ctrl+C (stop the running command) is only useful while a command is
+       running, and Tab is not usable then. body.command-running is
+       toggled from handleEnter() in js/terminal/input.js. */
+    body:not(.command-running) #mobile-stop-btn{
+        display:none;
+    }
+
+    body.command-running #mobile-tab-btn{
+        display:none;
+    }
 }

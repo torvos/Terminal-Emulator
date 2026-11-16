@@ -178,6 +178,8 @@ Object.assign(TerminalEngine.prototype, {
      * @param {Object} [options] - Optional rendering options.
      * @param {string} [options.color] - CSS color for the whole line, used
      *   only when `text` is a plain string.
+     * @param {boolean} [options.scroll=true] - Pass false to skip scrolling
+     *   to the bottom after this line.
      */
     write(text, options = {}) {
         const div = document.createElement("div");
@@ -229,7 +231,13 @@ Object.assign(TerminalEngine.prototype, {
         }
 
         this.output.appendChild(div);
-        this.scrollToBottom();
+        // Scrolling forces the browser to lay the page out again, which
+        // is slow when done after every line of a long output. Callers
+        // printing many lines in a row pass scroll: false and scroll once
+        // per batch themselves (see execute() in execute.js).
+        if (options.scroll !== false) {
+            this.scrollToBottom();
+        }
     },
 
     /**

@@ -167,7 +167,30 @@ Object.assign(TerminalEngine.prototype, {
         // - or, in capture mode, accumulates it instead and skips the
         // per-line animation delay (there's no point animating work
         // nobody can see yet).
-        const emit = async (text, opts) => {
+        //
+        // Pacing: each printed line adds its delay to `owedDelay`, and the
+        // pause is actually taken (and the view scrolled) once at least
+        // MIN_OUTPUT_PAUSE_MS has built up. At the normal
+        // LINE_PRINT_DELAY_MS that means a pause after every line, exactly
+        // as before. For long output the per-line delay is much smaller
+        // (see where perLineDelay is set below), so many lines are
+        // printed per pause instead of the browser being asked to sleep
+        // and re-lay-out the page for every single one.
+        let owedDelay = 0;
+        const pace = async (delay) => {
+            owedDelay += delay;
+            if (owedDelay >= MIN_OUTPUT_PAUSE_MS) {
+                await flushPace();
+            }
+        };
+        const flushPace = async () => {
+            if (capture || owedDelay <= 0) return;
+            const delay = owedDelay;
+            owedDelay = 0;
+            this.scrollToBottom();
+            await this.sleep(delay);
+        };
+        const emit = async (text, opts, perLineDelay = LINE_PRINT_DELAY_MS) => {
             if (capture) {
                 capturedOut.push(
                     typeof text === "string"
@@ -175,16 +198,18 @@ Object.assign(TerminalEngine.prototype, {
                         : (Array.isArray(text) ? text.map(s => s.text ?? s).join("") : String(text))
                 );
             } else {
-                this.write(text, opts);
-                await this.sleep(LINE_PRINT_DELAY_MS);
+                this.checkInterrupt();
+                this.write(text, { ...opts, scroll: false });
+                await pace(perLineDelay);
             }
         };
         const emitErrorLine = async (line) => {
             if (capture) {
                 capturedErr.push(line);
             } else {
-                this.write(this.formatErrorLine(line));
-                await this.sleep(LINE_PRINT_DELAY_MS);
+                this.checkInterrupt();
+                this.write(this.formatErrorLine(line), { scroll: false });
+                await pace(LINE_PRINT_DELAY_MS);
             }
         };
         this.lastExpansionEmpty = false;
@@ -388,6 +413,8 @@ Object.assign(TerminalEngine.prototype, {
                     // afterward no matter how the pipeline finishes.
                     try {
                         for (let index = 0; index < pipeline.length; index++) {
+                        // Ctrl+C stops here, before the next command starts
+                        this.checkInterrupt();
                         const parsed = this.parseCommand(pipeline[index]);
                         const cmd = this.restoreGlobChars(parsed.cmd);
 
@@ -462,6 +489,9 @@ Object.assign(TerminalEngine.prototype, {
                                     stdin
                                 );
                             } catch (err) {
+                                // Ctrl+C is not a command failure - let it
+                                // carry on up to handleEnter()
+                                if (err instanceof TerminalInterrupt) throw err;
                                 result = {
                                     stdout: "",
                                     stderr: `${cmd}: ${err.message}`,
@@ -490,6 +520,9 @@ Object.assign(TerminalEngine.prototype, {
                                     { trace: this.env.SCRIPTDEBUG, label: cmd }
                                 );
                             } catch (err) {
+                                // Ctrl+C is not a command failure - let it
+                                // carry on up to handleEnter()
+                                if (err instanceof TerminalInterrupt) throw err;
                                 result = {
                                     stdout: "",
                                     stderr: `${cmd}: ${err.message}`,
@@ -508,6 +541,11 @@ Object.assign(TerminalEngine.prototype, {
 
                         // Normalize a plain string return value into the standard
                         // {stdout, stderr, exitCode} result shape
+                        // A command that was told to stop (e.g. a pager closed
+                        // by Ctrl+C) returns normally - stop here rather than
+                        // carrying on with the rest of the line.
+                        this.checkInterrupt();
+
                         if (typeof result === "string") {
                             result = {
                                 stdout: result,
@@ -555,15 +593,27 @@ Object.assign(TerminalEngine.prototype, {
                             const validSegments =
                                 Array.isArray(result.stdoutSegments) &&
                                 result.stdoutSegments.length === lines.length;
+                            // Short output prints at the normal per-line
+                            // delay. Long output is sped up so that all of
+                            // it takes about MAX_OUTPUT_ANIMATION_MS in
+                            // total, however many lines there are.
+                            const perLineDelay = Math.min(
+                                LINE_PRINT_DELAY_MS,
+                                MAX_OUTPUT_ANIMATION_MS / lines.length
+                            );
                             for (let i = 0; i < lines.length; i++) {
                                 const segments = validSegments
                                     ? result.stdoutSegments[i]
                                     : undefined;
                                 await emit(
                                     segments ?? lines[i],
-                                    { color: COLOR_STDOUT }
+                                    { color: COLOR_STDOUT },
+                                    perLineDelay
                                 );
                             }
+                            // Take whatever pause is still owed, and scroll
+                            // the last lines into view.
+                            await flushPace();
                         }
 
                         if (result.exitCode !== 0) {
@@ -582,6 +632,7 @@ Object.assign(TerminalEngine.prototype, {
                                 for (const line of lines) {
                                     await emitErrorLine(line);
                                 }
+                                await flushPace();
                             }
                         }
 
