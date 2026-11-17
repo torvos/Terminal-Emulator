@@ -273,17 +273,6 @@ class TerminalEngine {
         await this.write(`Type 'help' for more commands.`, {color: COLOR_STDOUT});
         await this.write(``, {color: COLOR_STDOUT});
 
-        // `?run=<command>` lets a URL auto-type and auto-execute a command on load
-        if (params.has("run")) {
-            const command = params.get("run");
-            this.currentInput = command;
-            this.promptEl.textContent = `${DEFAULT_USER}@${HOSTNAME}:${this.cwd}$ ${command}`;   
-            this.cursorPos = command.length;
-            this.renderInput();   
-            this.hiddenInput.focus();
-            this.handleEnter();
-        }
-
         // Compute how many output lines fit on screen, used by the pager
         const style = getComputedStyle(document.documentElement);
         const lineHeight = parseFloat(style.lineHeight) || parseFloat(getComputedStyle(document.body).lineHeight);
@@ -297,6 +286,20 @@ class TerminalEngine {
         // fsDirty this turn.
         this.saveSettings({ forceFs: true });
         this.hiddenInput.focus();
+
+        // `?run=<command>` lets a URL auto-type and auto-execute a command
+        // on load. This is deliberately the LAST step of booting, and is
+        // awaited: the command runs exactly as if it had been typed at the
+        // finished prompt, with the pager size, prompt and boot-time save
+        // above already in place, and init() only resolves once the
+        // command has finished (handleEnter() does its own save then).
+        if (params.has("run")) {
+            const command = params.get("run");
+            this.currentInput = command;
+            this.cursorPos = command.length;
+            this.renderInput();
+            await this.handleEnter();
+        }
     }
 
     /**
