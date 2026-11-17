@@ -29,12 +29,27 @@ Object.assign(TerminalEngine.prototype, {
      * Matching real bash, a "{...}" group with no top-level comma inside it
      * (e.g. "file{bar}") is NOT a real brace expansion and is left as
      * literal text - `echo foo{bar}` prints `foo{bar}`, not `foobar`.
+     *
+     * The number of results is limited to MAX_BRACE_EXPANSIONS (see
+     * constants.js), because every extra group multiplies it.
      * @param {string} input - Input string possibly containing a {a,b,c} group.
+     * @param {{count: number}} [budget] - Running total of results produced
+     *   so far. Only passed by this function's own recursive calls; outside
+     *   callers leave it out.
      * @returns {string[]} All expanded variants (or [input] if no braces found).
+     * @throws {Error} If the expansion would produce more than
+     *   MAX_BRACE_EXPANSIONS results. execute() turns this into an
+     *   ordinary shell error message.
      */
-    expandBraces(input) {
+    expandBraces(input, budget = { count: 0 }) {
         const group = this.findBraceGroup(input);
         if (!group) {
+            // One finished result. Counting here, as each result is
+            // produced, stops an oversized expansion early instead of
+            // after it has already been built.
+            if (++budget.count > MAX_BRACE_EXPANSIONS) {
+                throw new Error(`brace expansion: too many results (the limit is ${MAX_BRACE_EXPANSIONS})`);
+            }
             return [input];
         }
 
@@ -45,7 +60,7 @@ Object.assign(TerminalEngine.prototype, {
             // No top-level comma inside the braces - not a real expansion.
             // Leave this group exactly as-is and keep looking for a real
             // one later in the string.
-            const tailResults = this.expandBraces(input.slice(end + 1));
+            const tailResults = this.expandBraces(input.slice(end + 1), budget);
             const prefix = input.slice(0, end + 1);
             return tailResults.map(tail => prefix + tail);
         }
@@ -59,7 +74,9 @@ Object.assign(TerminalEngine.prototype, {
             // brace group that was nested inside this alternative
             // ("a{1,{2,3}}" - once "{2,3}" is substituted in, the next
             // call finds it as an ordinary top-level group of its own).
-            results.push(...this.expandBraces(expanded));
+            for (const result of this.expandBraces(expanded, budget)) {
+                results.push(result);
+            }
         }
         return results;
     },

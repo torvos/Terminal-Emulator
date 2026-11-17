@@ -237,7 +237,25 @@ Object.assign(TerminalEngine.prototype, {
         // Expand aliases (e.g. "ll" -> "ls -la") and brace patterns
         // (e.g. "echo {a,b}" -> two commands to run: "echo a", "echo b")
         input = this.expandAlias(input);
-        const expandedCommands = this.expandBraces(input);
+        let expandedCommands;
+        try {
+            expandedCommands = this.expandBraces(input);
+        } catch (err) {
+            // Too many results (see MAX_BRACE_EXPANSIONS), or - for a line
+            // with an extreme number of brace groups - the JavaScript
+            // engine running out of stack while expanding them. Either
+            // way nothing on the line runs, same as any other syntax
+            // error above.
+            const line = err instanceof RangeError
+                ? "brace expansion: too many brace groups"
+                : err.message;
+            this.lastExitCode = EXIT_FAILURE;
+            if (capture) {
+                return { stdout: "", stderr: line, exitCode: EXIT_FAILURE };
+            }
+            await emitErrorLine(line);
+            return;
+        }
 
         // A pipe or and-or operator ("|", "&&", "||") with a missing
         // command on one side ("| cmd", "cmd |", "cmd | | cmd2", "cmd &&",

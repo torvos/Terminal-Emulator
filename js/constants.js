@@ -34,6 +34,12 @@ const EXIT_SUCCESS = 0;
 const EXIT_FAILURE = 1;
 const EXIT_SYNTAX_ERROR = 2;       // shell-level syntax error (e.g. an unterminated quote)
 const EXIT_COMMAND_NOT_FOUND = 127;
+// Most results one line's brace expansion may produce. Each "{a,b}" group
+// multiplies the number of results, so a short line can ask for millions
+// (`echo {a,b}{a,b}{a,b}...`); past this limit the line is rejected with
+// an error instead. See expandBraces() in js/terminal/parser.js.
+const MAX_BRACE_EXPANSIONS = 1024;
+
 const EXIT_INTERRUPTED = 130;        // stopped by Ctrl+C (128 + SIGINT, as in a real shell)
 const EXIT_NOT_EXECUTABLE = 126;    // found but not runnable (a directory, non-regular file, or missing the execute bit)
 
