@@ -176,7 +176,12 @@
      */
     function resolvePath(path, depth = 0) {
         if (depth > 20) {return null;} // guards against symlink loops
-        const parts = path.replace("~", "").split(ROOT).filter(Boolean);
+        // `path` is always an absolute path by this point (every caller
+        // goes through resolveRelativePath() first, which is what turns a
+        // leading "~" or "~/" into the home directory). A "~" anywhere
+        // else is just an ordinary character in a file name, e.g.
+        // "notes.txt~", and must be left alone.
+        const parts = path.split(ROOT).filter(Boolean);
         let node = FileSystem[ROOT];
         let currentPath = ROOT;
         for (const part of parts) {
