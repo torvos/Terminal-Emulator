@@ -7,6 +7,19 @@
 Object.assign(TerminalEngine.prototype, {
 
     /**
+     * Whether any text on the page is currently selected (highlighted)
+     * with the mouse or keyboard. Used to tell "click to focus" from
+     * "finished selecting", and Ctrl+C "copy" from Ctrl+C "interrupt".
+     * @returns {boolean}
+     */
+    hasTextSelection() {
+        const selection = typeof window.getSelection === "function"
+            ? window.getSelection()
+            : null;
+        return !!selection && !selection.isCollapsed && selection.toString() !== "";
+    },
+
+    /**
      * Sets up all event listeners used by the terminal: viewport resize
      * handling (for mobile keyboards), click-to-focus behavior, the main
      * keydown handler for the hidden input field (which drives typing,
@@ -42,24 +55,33 @@ Object.assign(TerminalEngine.prototype, {
         // open). A single document-level listener covers clicks inside
         // #output too, since it bubbles up from there - no separate
         // listener needed on #output itself.
-        document.addEventListener("click", () => {
-            if (this.inputMode === INPUT_NORMAL) {            
+        //
+        // The one exception is when the click is the end of a text
+        // selection (a drag, or a double-click on a word): focusing an
+        // input clears the page's selection, which would make it
+        // impossible to select and copy anything from the output. The
+        // input is left unfocused in that case; the document-level
+        // keydown listener further down brings focus back as soon as a
+        // key is pressed.
+        const focusActiveInput = () => {
+            if (this.inputMode === INPUT_EDITOR) {
+                this.editorEl.focus();
+            } else {
                 this.hiddenInput.focus();
             }
-            else if (this.inputMode === INPUT_EDITOR) {
-                this.editorEl.focus();
+        };
+
+        document.addEventListener("click", () => {
+            if (this.hasTextSelection()) {
+                return;
             }
+            focusActiveInput();
         });
 
         document.addEventListener("pointerdown", () => {
-            if (this.inputMode === INPUT_NORMAL) {            
-                this.hiddenInput.focus();
-            }
-            else if (this.inputMode === INPUT_EDITOR) {
-                this.editorEl.focus();
-            }
+            focusActiveInput();
         });
-        
+
         // On mobile, when the on-screen keyboard opens/closes the visual
         // viewport resizes; keep the page scrolled to the bottom so input stays visible.
         if (window.visualViewport) {
@@ -97,20 +119,43 @@ Object.assign(TerminalEngine.prototype, {
             this.editor.modified = true;
         };
 
-        // Main keydown handler for normal shell input (also handles pager keys)
-        this.hiddenInput.addEventListener("keydown", (e) => {
+        // Main keydown handler for normal shell input (also handles pager
+        // keys). Kept as a named function because two listeners feed it:
+        // the hidden input's own keydown, and the document-level one
+        // below for keys pressed while the hidden input isn't focused.
+        //
+        // Browser shortcuts: a key combination is only taken away from the
+        // browser (preventDefault) when the terminal actually does
+        // something with it. Everything else - Ctrl+R reload, Ctrl+F
+        // find, Ctrl+plus/minus zoom, Ctrl+P print, F5, F12 and so on -
+        // is left alone.
+        this.handleKeyDown = (e) => {
+
+            // Ctrl+C with text selected means "copy", as in most modern
+            // terminals: leave it to the browser and don't treat it as an
+            // interrupt. With nothing selected it keeps its terminal
+            // meaning (stop the running command / clear the typed line).
+            const isCtrlC = e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "c";
+            if (isCtrlC && this.hasTextSelection()) {
+                return;
+            }
+            const hasModifier = e.ctrlKey || e.metaKey || e.altKey;
 
             // While the pager ("--More--") is showing, only space/enter (advance)
-            // and 'q' (quit paging) are meaningful; swallow everything else.
+            // and 'q' (quit paging) are meaningful; swallow every other
+            // plain key (browser shortcuts still work).
             if (this.pager.active) {
-                e.preventDefault();
-
                 // Ctrl+C at a "--More--" prompt stops the command outright
                 // (requestInterrupt() also closes the prompt).
-                if (e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "c") {
+                if (isCtrlC) {
+                    e.preventDefault();
                     this.requestInterrupt();
                     return;
                 }
+                if (hasModifier) {
+                    return;
+                }
+                e.preventDefault();
 
                 if (e.key === " " || e.key === "Enter") {
                     this.output.lastChild.remove(); // remove the "--More--" line
@@ -142,15 +187,15 @@ Object.assign(TerminalEngine.prototype, {
             // A command is still running. Ctrl+C stops it; every other key
             // is ignored until it finishes, so nothing typed in the
             // meantime can pile up or start a second command on top of
-            // the first. (Cmd+key browser shortcuts on macOS are left
-            // alone.)
+            // the first. (Browser shortcuts - anything with Ctrl, Cmd or
+            // Alt held - are left alone.)
             if (this.busy) {
-                if (e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "c") {
+                if (isCtrlC) {
                     e.preventDefault();
                     this.requestInterrupt();
                     return;
                 }
-                if (!e.metaKey) {
+                if (!hasModifier) {
                     e.preventDefault();
                 }
                 return;
@@ -217,8 +262,9 @@ Object.assign(TerminalEngine.prototype, {
                     }
 
                     default:
-                        // Swallow any other Ctrl-combo so it doesn't get typed literally
-                        e.preventDefault();
+                        // Not a terminal shortcut: leave it to the browser
+                        // (reload, find, zoom, print, ...). Returning here
+                        // also keeps the letter from being typed.
                         return;
                 }
             }
@@ -292,6 +338,41 @@ Object.assign(TerminalEngine.prototype, {
             // tracking as the source of truth for consistency).
             this.syncHiddenInput();
             this.renderInput();
+        };
+
+        this.hiddenInput.addEventListener("keydown", this.handleKeyDown);
+
+        // Keys pressed while the hidden input does NOT have focus. That
+        // happens after selecting text in the output with the mouse (see
+        // the click listener above, which deliberately leaves the input
+        // unfocused then). Typing should simply work again, so focus goes
+        // back to the hidden input and the key is handled as usual -
+        // except for keys that act on the selection itself, which must
+        // not move focus (moving it clears the selection):
+        //   - a modifier key on its own (the "Ctrl" of a coming Ctrl+C)
+        //   - anything with Cmd held (Cmd+C / Cmd+A on macOS)
+        //   - Ctrl+C / Ctrl+Insert / Ctrl+A with text selected
+        //   - Shift+arrows (extend the selection) and the scrolling keys
+        const SELECTION_KEYS = new Set([
+            "Control", "Shift", "Alt", "Meta", "AltGraph", "CapsLock", "ContextMenu",
+            "PageUp", "PageDown", "Home", "End"
+        ]);
+        document.addEventListener("keydown", (e) => {
+            if (e.target === this.hiddenInput || this.inputMode === INPUT_EDITOR) {
+                return; // the hidden input's / the editor's own listener has it
+            }
+            if (SELECTION_KEYS.has(e.key) || e.metaKey) {
+                return;
+            }
+            if (e.shiftKey && e.key.startsWith("Arrow")) {
+                return;
+            }
+            if (e.ctrlKey && this.hasTextSelection() &&
+                ["c", "a", "insert"].includes(e.key.toLowerCase())) {
+                return;
+            }
+            this.hiddenInput.focus();
+            this.handleKeyDown(e);
         });
 
         // Handles pasting text into the shell: strips newlines (collapsing
