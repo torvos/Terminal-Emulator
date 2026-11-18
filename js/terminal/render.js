@@ -98,7 +98,10 @@ Object.assign(TerminalEngine.prototype, {
             let end = url.length;
             while (end > 0) {
                 const ch = url[end - 1];
-                if (".,;:!?'*".includes(ch)) {
+                // Sentence punctuation, plus the typographic ellipsis and
+                // closing quotes word processors substitute for the
+                // plain ones.
+                if (".,;:!?'*\u2026\u201D\u2019\u00BB\u203A".includes(ch)) {
                     end--;
                     continue;
                 }

@@ -44,6 +44,22 @@ test("trailing sentence punctuation is not part of the link", async () => {
         "E:a@b.co->mailto:a@b.co|T:, or |E:c@d.org->mailto:c@d.org|T:.");
 });
 
+test("typographic punctuation after a URL is not part of the link either", async () => {
+    for (const tail of ["\u2026", "\u201D", "\u2019", "\u00BB", "?!", "...", ";", "*"]) {
+        const parts = terminal.findLinks("https://example.com/x" + tail);
+        assertEqual(parts[0].text, "https://example.com/x");
+        assertEqual(parts[1].text, tail);
+    }
+});
+
+test("punctuation inside a URL is kept", async () => {
+    for (const url of ["https://example.com/a,b?c=1,2", "https://example.com/a.b.c", "https://example.com/?q=[1]", "https://example.com/a;b=1/c"]) {
+        const parts = terminal.findLinks(url);
+        assertEqual(parts.length, 1);
+        assertEqual(parts[0].text, url);
+    }
+});
+
 test("brackets balanced inside the URL are kept", async () => {
     const parts = terminal.findLinks("https://en.wikipedia.org/wiki/Rust_(programming_language)");
     assertEqual(parts.length, 1);
