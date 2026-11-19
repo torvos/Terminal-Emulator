@@ -163,8 +163,16 @@ body {
     /* Esc only matters while the full-screen editor is open; Tab-completion
        only makes sense for normal shell input. body.editor-mode is toggled
        from js/terminal/editor.js. */
-    body:not(.editor-mode) #mobile-esc-btn{
+    body:not(.editor-mode) #mobile-esc-btn,
+    body:not(.editor-mode) #mobile-save-btn,
+    body:not(.editor-mode) #mobile-save-exit-btn{
         display:none;
+    }
+
+    /* Leave room under the last line of text so the buttons, which float
+       over the bottom of the editor, never cover what is being typed. */
+    body.editor-mode #editor{
+        padding-bottom:56px;
     }
 
     body.editor-mode #mobile-tab-btn{

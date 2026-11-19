@@ -108,14 +108,33 @@ Object.assign(TerminalEngine.prototype, {
                 return;
             }
 
-            // Escape: exit the editor without saving
+            // Escape: exit the editor without saving. If there are unsaved
+            // changes the first press only asks, and a second press
+            // confirms - see closeEditor() in editor.js.
             if (event.key === "Escape") {
                 event.preventDefault();
                 this.closeEditor(false);
                 return;
             }
 
-            // Any other keystroke is considered a content modification
+            // A modifier key on its own (e.g. the Ctrl of a coming Ctrl+S)
+            // is not an answer to anything.
+            if (["Control", "Shift", "Alt", "Meta", "AltGraph", "CapsLock"].includes(event.key)) {
+                return;
+            }
+
+            // Any other key means "keep editing": it withdraws a pending
+            // "press Esc again to discard" question.
+            this.resumeEditing();
+            this.editor.modified = true;
+        };
+
+        // Text arriving in the editor without a usable keydown (touch
+        // keyboards, dictation, paste from a menu) also means "keep
+        // editing". Attached/detached alongside editorKeyHandler in
+        // editor.js.
+        this.editorInputHandler = () => {
+            this.resumeEditing();
             this.editor.modified = true;
         };
 
@@ -453,12 +472,23 @@ Object.assign(TerminalEngine.prototype, {
             });
         }
 
-        const mobileEscBtn = document.getElementById("mobile-esc-btn");
-        if (mobileEscBtn) {
-            mobileEscBtn.addEventListener("mousedown", (e) => e.preventDefault());
-            mobileEscBtn.addEventListener("click", () => {
-                this.closeEditor(false);
-            });
+        // Editor buttons for touch devices, which have no Ctrl or Esc
+        // key: Save (Ctrl+S), Save & Exit (Ctrl+X) and Esc. Only shown
+        // while the editor is open (see body.editor-mode in terminal.css).
+        // mousedown is cancelled on each so that tapping a button doesn't
+        // take focus (and the on-screen keyboard) away from the editor.
+        const mobileEditorButtons = {
+            "mobile-save-btn": () => this.saveEditor(),
+            "mobile-save-exit-btn": () => this.closeEditor(true),
+            // Esc: with unsaved changes the first tap only asks (the
+            // button then reads "Discard changes"); a second tap confirms.
+            "mobile-esc-btn": () => this.closeEditor(false)
+        };
+        for (const [id, action] of Object.entries(mobileEditorButtons)) {
+            const button = document.getElementById(id);
+            if (!button) continue;
+            button.addEventListener("mousedown", (e) => e.preventDefault());
+            button.addEventListener("click", action);
         }
     },
 

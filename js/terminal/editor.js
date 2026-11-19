@@ -17,11 +17,13 @@ Object.assign(TerminalEngine.prototype, {
         this.editor.node = node;
         this.editor.path = path;
         this.editor.modified = false;
+        this.editor.confirmingDiscard = false;
         this.inputMode = INPUT_EDITOR;
         document.getElementById("input-line").style.display = "none";
         document.getElementById("output").style.display = "none";
-        document.body.classList.add("editor-mode");
+        document.body?.classList.add("editor-mode");
         this.editorEl.addEventListener("keydown", this.editorKeyHandler);
+        this.editorEl.addEventListener("input", this.editorInputHandler);
         this.editorContainer.style.display = "flex";
         this.editorEl.value = node.content ?? "";
 
@@ -34,7 +36,67 @@ Object.assign(TerminalEngine.prototype, {
                 this.editorEl.value.length
             );
         });
-        document.getElementById("editor-header").textContent = this.editorHeaderText(path);
+        this.setEditorNotice(null);
+    },
+
+    /**
+     * Whether the text in the editor differs from what is stored in the
+     * file - i.e. whether closing now would lose something. Compares the
+     * actual text, so moving the cursor around, or typing something and
+     * deleting it again, doesn't count as a change.
+     * @returns {boolean}
+     */
+    isEditorDirty() {
+        return this.editor.active &&
+            this.editorEl.value !== (this.editor.node?.content ?? "");
+    },
+
+    /**
+     * Sets the editor's one-line header, and keeps the touch toolbar's
+     * exit button label in step with it.
+     * @param {"saved"|"save-failed"|"confirm-discard"|null} notice - What
+     *   to tell the user, or null for the normal header (key hints only).
+     */
+    setEditorNotice(notice) {
+        const path = this.editor.path;
+        const keys = "Ctrl+S Save | Ctrl+X Save & Exit | Esc Exit";
+        let text;
+        switch (notice) {
+            case "saved":
+                text = `Editing: ${path} | Saved | ${keys}`;
+                break;
+            case "save-failed":
+                // Too big for the filesystem's size limits (see FS_MAX_*
+                // in constants.js).
+                text = `Editing: ${path} | NOT SAVED: No space left on device - shorten the file and save again | Esc Exit without saving`;
+                break;
+            case "confirm-discard":
+                text = `Editing: ${path} | UNSAVED CHANGES - press Esc again to discard them | Ctrl+X Save & Exit | any other key keeps editing`;
+                break;
+            default:
+                text = `Editing: ${path} | ${keys}`;
+        }
+        this.editor.notice = notice;
+        document.getElementById("editor-header").textContent = text;
+
+        // On touch devices the exit button says what a tap will do next.
+        const escBtn = document.getElementById("mobile-esc-btn");
+        if (escBtn) {
+            escBtn.textContent = notice === "confirm-discard" ? "Discard changes" : "Esc";
+        }
+    },
+
+    /**
+     * Called when the user carries on editing (a key press or typed
+     * text): withdraws a pending "press Esc again to discard" question
+     * and clears a "Saved" / "NOT SAVED" message, since both describe a
+     * moment that has passed.
+     */
+    resumeEditing() {
+        this.editor.confirmingDiscard = false;
+        if (this.editor.notice) {
+            this.setEditorNotice(null);
+        }
     },
 
     /**
@@ -47,30 +109,34 @@ Object.assign(TerminalEngine.prototype, {
         if (!this.editor.active){
             return;
         }
-        const header = document.getElementById("editor-header");
+        this.editor.confirmingDiscard = false;
         const wrote = this.fs.writeContent(this.editor.node, this.editorEl.value);
         if (!wrote) {
-            // Too big for the filesystem's size limits (see FS_MAX_* in
-            // constants.js). Nothing was written; the text stays in the
-            // editor so it can be shortened and saved again.
-            header.textContent = `Editing: ${this.editor.path} | NOT SAVED: No space left on device - shorten the file and save again | Esc Exit without saving`;
+            // Nothing was written; the text stays in the editor so it can
+            // be shortened and saved again.
+            this.setEditorNotice("save-failed");
             return false;
         }
-        header.textContent = this.editorHeaderText(this.editor.path);
+        this.setEditorNotice("saved");
         this.fsDirty = true;
         this.saveSettings();
         this.editor.modified = false;
         return true;
     },
 
-    // The editor's normal one-line header (file path + key hints).
-    editorHeaderText(path) {
-        return `Editing: ${path} | Ctrl+S Save | Ctrl+X Save & Exit | Esc Exit`;
-    },
-
     /**
      * Closes the editor overlay and restores normal terminal input/output.
+     *
+     * Closing WITHOUT saving while there are unsaved changes takes two
+     * steps: the first call only asks (the header shows "press Esc again
+     * to discard"), and the editor stays open; a second call straight
+     * after it discards the changes and closes. Anything else the user
+     * does in between (typing, saving) withdraws the question - see
+     * resumeEditing().
      * @param {boolean} [save=false] - If true, saves changes before closing.
+     * @returns {boolean|undefined} true if the editor closed, false if it
+     *   stayed open (save failed, or waiting for the discard to be
+     *   confirmed), undefined if it wasn't open.
      */
     closeEditor(save = false) {
         if (!this.editor.active){
@@ -79,13 +145,21 @@ Object.assign(TerminalEngine.prototype, {
         if (save && this.saveEditor() === false){
             // The save failed - stay in the editor rather than closing
             // and losing the text.
-            return;
+            return false;
         }
+        if (!save && this.isEditorDirty() && !this.editor.confirmingDiscard) {
+            this.editor.confirmingDiscard = true;
+            this.setEditorNotice("confirm-discard");
+            return false;
+        }
+        this.editor.confirmingDiscard = false;
+        this.setEditorNotice(null); // also resets the touch exit button's label
         this.editor.active = false;
         this.editor.node = null;
         this.editorContainer.style.display = "none";
         this.editorEl.removeEventListener("keydown",this.editorKeyHandler);
-        document.body.classList.remove("editor-mode");
+        this.editorEl.removeEventListener("input", this.editorInputHandler);
+        document.body?.classList.remove("editor-mode");
         document.getElementById("input-line").style.display = "";
         document.getElementById("output").style.display = "";
         this.inputMode = INPUT_NORMAL;
@@ -97,6 +171,7 @@ Object.assign(TerminalEngine.prototype, {
         // the top instead of back where the user was (the bottom, same as
         // every other place that writes to the terminal).
         this.scrollToBottom();
+        return true;
     }
 
 });
