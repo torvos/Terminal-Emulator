@@ -734,12 +734,18 @@ Object.assign(TerminalEngine.prototype, {
      * word, not just the part before the cursor).
      *
      * If the word is the very first one on the line and doesn't already
-     * look like a path (no "/"), it's completed against known command
-     * names; otherwise it's completed as a filesystem path relative to
-     * cwd. Only autocompletes when there is exactly one unambiguous
-     * match - otherwise nothing changes, including the cursor position.
+     * look like a path (no "/"), it's completed against known command and
+     * alias names; otherwise it's completed as a filesystem path relative
+     * to cwd. Then, like bash:
+     *   - no match: nothing changes
+     *   - one match: the word is completed
+     *   - several matches: the word is completed as far as they all
+     *     agree (their longest common prefix); if that adds nothing, the
+     *     candidates are listed under the prompt instead, and the typed
+     *     line is left as it was
      */
     autocomplete() {
+        if (this.inputMode !== INPUT_NORMAL) return;
         if (!this.currentInput.trim()) return;
 
         const input = this.currentInput;
@@ -757,18 +763,56 @@ Object.assign(TerminalEngine.prototype, {
         // on the line (a command name), unless it already looks like a path.
         const isFirstWord = linePrefix.trim() === "";
 
-        let completion;
+        let matches;
         if (isFirstWord && !partial.includes(ROOT)) {
-            const commands = Object.keys(window.Commands);
-            completion = commands.find(c => c.startsWith(partial));
+            const names = new Set([
+                ...Object.keys(window.Commands),
+                ...Object.keys(this.aliases)
+            ]);
+            matches = [...names].filter(name => name.startsWith(partial)).sort();
         } else {
-            const matches = this.findPathMatches(partial);
-            completion = matches.length === 1 ? matches[0] : undefined;
+            matches = this.findPathMatches(partial).sort();
         }
 
-        if (!completion) {
-            // No match, or more than one - leave the input and cursor
-            // exactly as they were rather than guessing.
+        if (matches.length === 0) {
+            return;
+        }
+
+        // The longest text every candidate starts with. With a single
+        // candidate that is the candidate itself.
+        let completion = matches[0];
+        for (const match of matches) {
+            let shared = 0;
+            while (shared < completion.length && completion[shared] === match[shared]) {
+                shared++;
+            }
+            completion = completion.slice(0, shared);
+        }
+
+        if (matches.length > 1 && completion.length <= partial.length) {
+            // Several candidates and nothing more to fill in: show them.
+            // For paths only the last segment is shown ("docs/" rather
+            // than "/home/guest/docs/"), as in a real shell.
+            const MAX_LISTED = 100;
+            const labels = matches.slice(0, MAX_LISTED).map(match => {
+                const trimmed = match.endsWith(ROOT) ? match.slice(0, -1) : match;
+                return match.slice(trimmed.lastIndexOf(ROOT) + 1);
+            });
+            if (matches.length > MAX_LISTED) {
+                labels.push(`... and ${matches.length - MAX_LISTED} more`);
+            }
+            this.write(`${DEFAULT_USER}@${HOSTNAME}:${this.cwd}$ ${input}`);
+            // Laid out in equal-width columns that fit the screen, so a
+            // name is never broken across two lines on a narrow screen.
+            const columnWidth = Math.max(...labels.map(label => label.length)) + 2;
+            const perRow = Math.max(1, Math.floor(this.getColumns() / columnWidth));
+            for (let i = 0; i < labels.length; i += perRow) {
+                const row = labels.slice(i, i + perRow)
+                    .map(label => label.padEnd(columnWidth))
+                    .join("")
+                    .trimEnd();
+                this.write(row, { color: COLOR_STDOUT });
+            }
             return;
         }
 
@@ -820,6 +864,9 @@ Object.assign(TerminalEngine.prototype, {
 
         return Object.keys(node.children)
             .filter(name => name.startsWith(prefix))
+            // Like a real shell, hidden (dot) files are only offered once
+            // the user has typed the leading "."
+            .filter(name => prefix.startsWith(".") || !name.startsWith("."))
             .map(name => {
                 const child = node.children[name];
 
