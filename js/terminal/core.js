@@ -629,4 +629,37 @@ class TerminalEngine {
 
         return Math.floor(terminal.clientHeight / lineHeight) - 1;
     }
+
+    /**
+     * Calculates how many characters fit on one line of the terminal at
+     * its current size and font. Commands with fixed-width layouts (e.g.
+     * `help`) use this to pick a layout that fits instead of one that
+     * wraps on a narrow (phone) screen.
+     * @returns {number} Characters per line, or 80 if it can't be
+     *   measured (e.g. there is no real page, as in the Node tests).
+     */
+    getColumns() {
+        const FALLBACK_COLUMNS = 80;
+        try {
+            const terminal = document.getElementById("terminal");
+            // Measure the real width of a character in the output font by
+            // briefly adding an invisible run of them to the output.
+            const SAMPLE = 50;
+            const probe = document.createElement("span");
+            probe.textContent = "0".repeat(SAMPLE);
+            probe.style.visibility = "hidden";
+            probe.style.position = "absolute";
+            probe.style.whiteSpace = "pre";
+            this.output.appendChild(probe);
+            const charWidth = probe.getBoundingClientRect()?.width / SAMPLE;
+            probe.remove();
+
+            const style = getComputedStyle(terminal);
+            const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+            const columns = Math.floor((terminal.clientWidth - padding) / charWidth);
+            return Number.isFinite(columns) && columns > 0 ? columns : FALLBACK_COLUMNS;
+        } catch {
+            return FALLBACK_COLUMNS;
+        }
+    }
 }
