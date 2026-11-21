@@ -15,15 +15,15 @@
 
 <div id="terminal-container">
     <main id="terminal">
-        <div id="output"></div>
-        <div id="input-line">
+        <div id="output" role="log" aria-live="polite" aria-label="Terminal output"></div>
+        <div id="input-line" aria-hidden="true">
             <span id="prompt"></span>
             <span id="command"></span>
         </div>
         <div id="editor-container">
-            <div id="editor-header">
+            <div id="editor-header" role="status" aria-live="polite">
             </div>
-            <textarea id="editor"></textarea>
+            <textarea id="editor" aria-label="File editor" spellcheck="false"></textarea>
         </div>
         <div id="scroll-anchor"></div>
     </main>
@@ -32,16 +32,17 @@
 <!-- Touch-only affordances for keys most virtual keyboards don't expose.
      Hidden on non-touch devices via CSS (see terminal.css). -->
 <div id="mobile-toolbar">
-    <button type="button" id="mobile-tab-btn">Tab</button>
+    <button type="button" id="mobile-tab-btn" aria-label="Complete the command or file name">Tab</button>
     <button type="button" id="mobile-save-btn">Save</button>
     <button type="button" id="mobile-save-exit-btn">Save &amp; Exit</button>
-    <button type="button" id="mobile-esc-btn">Esc</button>
-    <button type="button" id="mobile-stop-btn">Ctrl+C</button>
+    <button type="button" id="mobile-esc-btn" aria-label="Exit the editor without saving">Esc</button>
+    <button type="button" id="mobile-stop-btn" aria-label="Stop the running command">Ctrl+C</button>
 </div>
 
 <input
     id="hidden-input"
     type="text"
+    aria-label="Terminal command input"
     autocomplete="off"
     autocorrect="off"
     autocapitalize="off"

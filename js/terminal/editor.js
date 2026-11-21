@@ -82,7 +82,13 @@ Object.assign(TerminalEngine.prototype, {
         // On touch devices the exit button says what a tap will do next.
         const escBtn = document.getElementById("mobile-esc-btn");
         if (escBtn) {
-            escBtn.textContent = notice === "confirm-discard" ? "Discard changes" : "Esc";
+            const confirming = notice === "confirm-discard";
+            escBtn.textContent = confirming ? "Discard changes" : "Esc";
+            // The spoken label follows the visible one.
+            escBtn.setAttribute(
+                "aria-label",
+                confirming ? "Discard changes and exit the editor" : "Exit the editor without saving"
+            );
         }
     },
 

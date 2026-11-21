@@ -57,6 +57,11 @@ const PAGER_SCROLL_DELAY_MS = 20;
 // sped up so the whole thing takes about this long instead of growing
 // without limit. See execute() in js/terminal/execute.js.
 const MAX_OUTPUT_ANIMATION_MS = 3000;
+// Most lines of output kept on the page. Once there are more, the oldest
+// are removed as new ones arrive, so a long session (or one huge command)
+// can't make the page slower and slower. See trimScrollback() in
+// js/terminal/render.js.
+const MAX_SCROLLBACK_LINES = 5000;
 // Smallest pause worth taking between output lines (roughly one screen
 // frame). Faster output is printed several lines per pause instead.
 const MIN_OUTPUT_PAUSE_MS = 16;   // delay between each line when less/more scroll

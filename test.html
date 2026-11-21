@@ -75,14 +75,14 @@
 <div id="terminal-fixture" aria-hidden="true">
     <div id="terminal-container">
         <main id="terminal">
-            <div id="output"></div>
-            <div id="input-line">
+            <div id="output" role="log" aria-live="polite" aria-label="Terminal output"></div>
+            <div id="input-line" aria-hidden="true">
                 <span id="prompt"></span>
                 <span id="command"></span>
             </div>
             <div id="editor-container">
-                <div id="editor-header"></div>
-                <textarea id="editor"></textarea>
+                <div id="editor-header" role="status" aria-live="polite"></div>
+                <textarea id="editor" aria-label="File editor" spellcheck="false"></textarea>
             </div>
             <div id="scroll-anchor"></div>
         </main>
@@ -96,6 +96,7 @@
     <input
         id="hidden-input"
         type="text"
+        aria-label="Terminal command input"
         autocomplete="off"
         autocorrect="off"
         autocapitalize="off"
@@ -241,6 +242,7 @@
 <script src="tests/pager.test.js"></script>
 <script src="tests/pipeline.test.js"></script>
 <script src="tests/redirect-input-error.test.js"></script>
+<script src="tests/scrollback-a11y.test.js"></script>
 <script src="tests/save-frequency.test.js"></script>
 <script src="tests/sh.test.js"></script>
 <script src="tests/unterminated-quotes.test.js"></script>

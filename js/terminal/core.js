@@ -242,16 +242,20 @@ class TerminalEngine {
         createVirtualBin();
         createVirtualDev();
 
-        // Print the ASCII-art welcome banner
-        await this.write(`+------------------------------------------------------+`, {color: COLOR_STDOUT});
-        await this.write(`| ████████╗ ██████╗ ██████╗ ██╗   ██╗ ██████╗ ███████╗ |`, {color: COLOR_STDOUT});
-        await this.write(`| ╚══██╔══╝██╔═══██╗██╔══██╗██║   ██║██╔═══██╗██╔════╝ |`, {color: COLOR_STDOUT});
-        await this.write(`|    ██║   ██║   ██║██████╔╝██║   ██║██║   ██║███████╗ |`, {color: COLOR_STDOUT});
-        await this.write(`|    ██║   ██║   ██║██╔══██╗╚██╗ ██╔╝██║   ██║╚════██║ |`, {color: COLOR_STDOUT});
-        await this.write(`|    ██║   ╚██████╔╝██║  ██║ ╚████╔╝ ╚██████╔╝███████║ |`, {color: COLOR_STDOUT});
-        await this.write(`|    ╚═╝    ╚═════╝ ╚═╝  ╚═╝  ╚═══╝   ╚═════╝ ╚══════╝ |`, {color: COLOR_STDOUT});
-        await this.write(`|                Welcome to Torvos.ca                  |`, {color: COLOR_STDOUT});
-        await this.write(`+------------------------------------------------------+`, {color: COLOR_STDOUT});
+        // Print the ASCII-art welcome banner. It is a picture made of
+        // characters, which a screen reader would read out symbol by
+        // symbol, so every line of it is hidden from screen readers and
+        // they get the one line of real text in it instead.
+        this.writeForScreenReaders("Welcome to Torvos.ca");
+        await this.write(`+------------------------------------------------------+`, {color: COLOR_STDOUT, ariaHidden: true});
+        await this.write(`| ████████╗ ██████╗ ██████╗ ██╗   ██╗ ██████╗ ███████╗ |`, {color: COLOR_STDOUT, ariaHidden: true});
+        await this.write(`| ╚══██╔══╝██╔═══██╗██╔══██╗██║   ██║██╔═══██╗██╔════╝ |`, {color: COLOR_STDOUT, ariaHidden: true});
+        await this.write(`|    ██║   ██║   ██║██████╔╝██║   ██║██║   ██║███████╗ |`, {color: COLOR_STDOUT, ariaHidden: true});
+        await this.write(`|    ██║   ██║   ██║██╔══██╗╚██╗ ██╔╝██║   ██║╚════██║ |`, {color: COLOR_STDOUT, ariaHidden: true});
+        await this.write(`|    ██║   ╚██████╔╝██║  ██║ ╚████╔╝ ╚██████╔╝███████║ |`, {color: COLOR_STDOUT, ariaHidden: true});
+        await this.write(`|    ╚═╝    ╚═════╝ ╚═╝  ╚═╝  ╚═══╝   ╚═════╝ ╚══════╝ |`, {color: COLOR_STDOUT, ariaHidden: true});
+        await this.write(`|                Welcome to Torvos.ca                  |`, {color: COLOR_STDOUT, ariaHidden: true});
+        await this.write(`+------------------------------------------------------+`, {color: COLOR_STDOUT, ariaHidden: true});
 
         // Short getting-started message: how to interact + the quick-look aliases
         // (defined in DEFAULT_ALIASES in constants.js).

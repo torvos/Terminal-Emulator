@@ -676,6 +676,7 @@ Object.assign(TerminalEngine.prototype, {
                 this.renderInput();
                 this.inputMode = INPUT_WAIT_FOR_PASSWORD;
                 this.promptEl.textContent = "password:";
+                this.setInputLabel("Password (what you type is not shown)");
                 break;
             case INPUT_WAIT_FOR_PASSWORD:
                 // This demo login flow always fails after a password attempt

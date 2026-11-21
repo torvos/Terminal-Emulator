@@ -41,6 +41,7 @@ registerCommand("login", {
         }
         terminal.inputMode = INPUT_WAIT_FOR_USERNAME;
         terminal.promptEl.textContent = "user:";
+        terminal.setInputLabel("User name");
         return {
             stdout:"",
             stderr:"",

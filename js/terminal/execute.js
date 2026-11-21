@@ -617,9 +617,14 @@ Object.assign(TerminalEngine.prototype, {
                             // total, however many lines there are.
                             const perLineDelay = Math.min(
                                 LINE_PRINT_DELAY_MS,
-                                MAX_OUTPUT_ANIMATION_MS / lines.length
+                                MAX_OUTPUT_ANIMATION_MS / Math.min(lines.length, MAX_SCROLLBACK_LINES)
                             );
-                            for (let i = 0; i < lines.length; i++) {
+                            // Output longer than the scrollback buffer: the
+                            // earliest lines would be removed again before
+                            // anyone could scroll back to them, so they are
+                            // not put on the page at all.
+                            const firstLine = Math.max(0, lines.length - MAX_SCROLLBACK_LINES);
+                            for (let i = firstLine; i < lines.length; i++) {
                                 const segments = validSegments
                                     ? result.stdoutSegments[i]
                                     : undefined;

@@ -16,6 +16,45 @@ Object.assign(TerminalEngine.prototype, {
     renderPrompt() {
         this.promptEl.textContent =
             `${DEFAULT_USER}@${HOSTNAME}:${this.cwd}$ `;
+        this.setInputLabel("Terminal command input");
+    },
+
+    /**
+     * Sets the name screen readers announce for the (invisible) input
+     * the user actually types into. The visible prompt next to it is
+     * decorative as far as assistive technology is concerned (it is
+     * aria-hidden in index.html), so whenever the prompt changes meaning
+     * - the shell prompt, "user:", "password:" - this has to say so.
+     * @param {string} label
+     */
+    setInputLabel(label) {
+        this.hiddenInput.setAttribute("aria-label", label);
+    },
+
+    /**
+     * Removes the oldest lines of output once there are more than
+     * MAX_SCROLLBACK_LINES (see constants.js). Called after every line
+     * is added, so normally it removes at most one.
+     */
+    trimScrollback() {
+        while (this.output.childElementCount > MAX_SCROLLBACK_LINES) {
+            this.output.firstElementChild.remove();
+        }
+    },
+
+    /**
+     * Adds a line that only screen readers get: it takes up no space and
+     * is invisible on screen. Used to give a text equivalent for output
+     * that is purely visual (e.g. the block-art banner, which is hidden
+     * from screen readers with write()'s ariaHidden option).
+     * @param {string} text
+     */
+    writeForScreenReaders(text) {
+        const div = document.createElement("div");
+        div.className = "sr-only";
+        div.textContent = text;
+        this.output.appendChild(div);
+        this.trimScrollback();
     },
 
     // Redraws the current input line, splitting it into "before cursor" /
@@ -183,9 +222,15 @@ Object.assign(TerminalEngine.prototype, {
      *   only when `text` is a plain string.
      * @param {boolean} [options.scroll=true] - Pass false to skip scrolling
      *   to the bottom after this line.
+     * @param {boolean} [options.ariaHidden=false] - Pass true for purely
+     *   decorative lines (block art, box borders) so screen readers skip
+     *   them; pair with writeForScreenReaders() if they carry meaning.
      */
     write(text, options = {}) {
         const div = document.createElement("div");
+        if (options.ariaHidden) {
+            div.setAttribute("aria-hidden", "true");
+        }
 
         // Fills `span` with text nodes and <a> elements for one segment.
         const appendLinked = (span, str) => {
@@ -234,6 +279,7 @@ Object.assign(TerminalEngine.prototype, {
         }
 
         this.output.appendChild(div);
+        this.trimScrollback();
         // Scrolling forces the browser to lay the page out again, which
         // is slow when done after every line of a long output. Callers
         // printing many lines in a row pass scroll: false and scroll once
@@ -276,11 +322,18 @@ Object.assign(TerminalEngine.prototype, {
      */
     async typeItOut(text, options = {}) {
         const div = document.createElement("div");
+        // The output pane is a live region (see index.html), so a line
+        // that grows one character at a time would be announced over and
+        // over, a fragment at a time. The animated line is therefore
+        // hidden from screen readers, and they get the whole line at once
+        // from an invisible copy instead.
+        div.setAttribute("aria-hidden", "true");
         this.output.appendChild(div);
 
         const segments = Array.isArray(text)
             ? text
             : [{ text: text ?? "", color: options.color }];
+        this.writeForScreenReaders(segments.map(segment => segment?.text ?? "").join(""));
 
         for (const segment of segments) {
             const span = document.createElement("span");
