@@ -24,6 +24,31 @@ class TerminalInterrupt extends Error {
 
 class TerminalEngine {
 
+    /**
+     * The shell's environment variables and aliases, each a table of
+     * name -> value. Both are looked up by names the user types
+     * (`echo $NAME`, running an alias), so both are always stored as
+     * "bare" objects with no prototype: on an ordinary object, a name
+     * like "constructor" or "toString" would find one of JavaScript's
+     * own built-in properties instead of "not set".
+     *
+     * These setters are what guarantee it. Any assignment -
+     * `terminal.env = { ... }`, a spread, saved settings - is copied
+     * into a fresh bare object, so no caller has to remember to.
+     */
+    get env() {
+        return this._env;
+    }
+    set env(values) {
+        this._env = Object.assign(Object.create(null), values);
+    }
+    get aliases() {
+        return this._aliases;
+    }
+    set aliases(values) {
+        this._aliases = Object.assign(Object.create(null), values);
+    }
+
     constructor() {
         // Cache references to the DOM elements the terminal renders into/reads from.
         this.output = document.getElementById("output");
@@ -128,7 +153,7 @@ class TerminalEngine {
         this.inputMode = INPUT_NORMAL;
 
         // Attempt to restore previous session settings (history, cwd, env, aliases)
-        const savedSettings = localStorage.getItem(STORAGE_KEY_SETTINGS);
+        const savedSettings = this.readStorage(STORAGE_KEY_SETTINGS);
         let settingsWereCorrupted = false;
         if (savedSettings) {
             let settings = null;
@@ -138,8 +163,8 @@ class TerminalEngine {
                 // Corrupted/invalid JSON (e.g. manual edit, partial write) —
                 // wipe it out and fall back to defaults rather than throwing
                 // and leaving the terminal unable to boot at all.
-                localStorage.removeItem(STORAGE_KEY_SETTINGS);
-                localStorage.removeItem(STORAGE_KEY_FILESYSTEM);
+                this.removeStorage(STORAGE_KEY_SETTINGS);
+                this.removeStorage(STORAGE_KEY_FILESYSTEM);
                 settingsWereCorrupted = true;
             }
 
@@ -147,7 +172,7 @@ class TerminalEngine {
             // `null`, a number, an array) - treat that as corrupted too.
             if (!settingsWereCorrupted &&
                 (typeof settings !== "object" || settings === null || Array.isArray(settings))) {
-                localStorage.removeItem(STORAGE_KEY_SETTINGS);
+                this.removeStorage(STORAGE_KEY_SETTINGS);
                 settings = null;
                 settingsWereCorrupted = true;
             }
@@ -177,13 +202,13 @@ class TerminalEngine {
         }
 
         // Attempt to restore the saved virtual filesystem
-        const savedFileSystem = localStorage.getItem(STORAGE_KEY_FILESYSTEM);
+        const savedFileSystem = this.readStorage(STORAGE_KEY_FILESYSTEM);
         let filesystemWasCorrupted = false;
         if (savedFileSystem) {
             const restored = FileSystemAPI.restore(savedFileSystem);
             if (!restored) {
                 // Restore failed (e.g. corrupted/invalid JSON) — fall back to defaults
-                localStorage.removeItem(STORAGE_KEY_FILESYSTEM);
+                this.removeStorage(STORAGE_KEY_FILESYSTEM);
                 filesystemWasCorrupted = true;
             }
         }
@@ -303,6 +328,40 @@ class TerminalEngine {
             this.cursorPos = command.length;
             this.renderInput();
             await this.handleEnter();
+        }
+    }
+
+    /**
+     * Reads a saved value from the browser's localStorage.
+     *
+     * Just touching `localStorage` can throw - some browsers refuse
+     * access outright when site data is blocked (certain privacy
+     * settings, some embedded/in-app browsers). That must not stop the
+     * terminal from starting: it simply runs without a saved session,
+     * exactly as on a first visit, and saveSettings() tells the visitor
+     * once that nothing will be kept.
+     * @param {string} key
+     * @returns {string|null} The saved value, or null if there is none or
+     *   storage can't be used.
+     */
+    readStorage(key) {
+        try {
+            return localStorage.getItem(key);
+        } catch (err) {
+            return null;
+        }
+    }
+
+    /**
+     * Deletes a saved value from localStorage; does nothing if storage
+     * can't be used (see readStorage()).
+     * @param {string} key
+     */
+    removeStorage(key) {
+        try {
+            localStorage.removeItem(key);
+        } catch (err) {
+            // Nothing was stored, so there is nothing to remove.
         }
     }
 

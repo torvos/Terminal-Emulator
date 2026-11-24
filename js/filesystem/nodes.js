@@ -85,7 +85,10 @@ window.__FS_NODE_HELPERS__ = (function() {
             created: now,
             modified: now,
             accessed: now,
-            children: {}
+            // A bare object (no prototype), so a file name can never
+            // collide with a built-in property such as "constructor" -
+            // see bareChildren() in fileapi.js.
+            children: Object.create(null)
         };
     }
 

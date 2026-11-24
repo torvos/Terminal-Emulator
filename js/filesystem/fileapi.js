@@ -26,6 +26,72 @@
     let FileSystem = window.__DEFAULT_FILESYSTEM_SEED__;
     delete window.__DEFAULT_FILESYSTEM_SEED__;
 
+    /**
+     * Makes every directory's `children` table in a tree a "bare" object
+     * (one with no prototype), in place, and returns the tree.
+     *
+     * Why: `children` is looked up by file name all over the codebase
+     * (`node.children[name]`), and names come from the user. On an
+     * ordinary object, names such as "constructor", "toString" or
+     * "__proto__" would find JavaScript's own built-in properties instead
+     * of "no such file" - so `cat constructor` would "find" something,
+     * and `touch __proto__` would write onto the prototype every object
+     * shares. A bare object has no built-in properties, so a name is
+     * only ever found if a file by that name was really created.
+     *
+     * Objects made by JSON.parse(), structuredClone() or an object
+     * literal are ordinary ones, so this must be applied to any tree
+     * that comes from one of those before it joins the filesystem - see
+     * the call sites below and normalizeTree() in the public API.
+     */
+    function bareChildren(root) {
+        const pending = [root];
+        while (pending.length > 0) {
+            const node = pending.pop();
+            if (node && typeof node.children === "object" && node.children !== null) {
+                Object.setPrototypeOf(node.children, null);
+                for (const name of Object.keys(node.children)) {
+                    pending.push(node.children[name]);
+                }
+            }
+        }
+        return root;
+    }
+    bareChildren(FileSystem[ROOT]);
+
+    // How many levels a node and everything under it span: 1 for a file
+    // or an empty directory, 2 for a directory holding files, and so on.
+    function treeHeight(root) {
+        let height = 0;
+        const pending = [[root, 1]];
+        while (pending.length > 0) {
+            const [node, level] = pending.pop();
+            if (level > height) height = level;
+            if (node && node.children) {
+                for (const name of Object.keys(node.children)) {
+                    pending.push([node.children[name], level + 1]);
+                }
+            }
+        }
+        return height;
+    }
+
+    // How many levels below "/" a node that is already in the tree sits
+    // (0 for "/" itself), or -1 if it isn't in the tree.
+    function depthOf(target) {
+        const pending = [[FileSystem[ROOT], 0]];
+        while (pending.length > 0) {
+            const [node, depth] = pending.pop();
+            if (node === target) return depth;
+            if (node && node.children) {
+                for (const name of Object.keys(node.children)) {
+                    pending.push([node.children[name], depth + 1]);
+                }
+            }
+        }
+        return -1;
+    }
+
     // Same pattern as the seed data above: mode.js/format.js/nodes.js each
     // load just before this file and expose their functions as a temporary
     // global, which is pulled into local scope here and immediately deleted -
@@ -65,10 +131,16 @@
     // literally named "__proto__", but nothing downstream should have to
     // rely on that; reject them as invalid data instead.
     const UNSAFE_CHILD_NAMES = new Set(["__proto__", "constructor", "prototype"]);
+    // (Creating an entry with one of these names is refused up front by
+    // checkName() below, so a tree made through the terminal never
+    // contains them.)
     // Sanity cap on how deeply nested the tree is allowed to be while
     // validating it - not a realistic limit for any real filesystem, just
     // a guard against a maliciously/corruptly deep JSON payload blowing
     // the stack while isValidNode() walks it recursively.
+    // It must stay comfortably above FS_MAX_DEPTH (constants.js), the
+    // depth the terminal lets anyone actually create - see the comment
+    // there for what goes wrong otherwise.
     const MAX_TREE_DEPTH = 200;
 
     function isPlainObject(value) {
@@ -668,7 +740,20 @@
          * @returns {string|null} null if fine, otherwise an error message.
          */
         checkName(name) {
-            return String(name).length > FS_MAX_NAME_LENGTH ? "File name too long" : null;
+            name = String(name);
+            if (name.length > FS_MAX_NAME_LENGTH) {
+                return "File name too long";
+            }
+            // Names the saved-filesystem validator rejects (see
+            // UNSAFE_CHILD_NAMES above). Allowing one to be created would
+            // make the whole saved filesystem fail validation - and be
+            // thrown away - on the next visit.
+            if (UNSAFE_CHILD_NAMES.has(name)) {
+                return "Invalid file name";
+            }
+            return null;
+        },
+
         /**
          * Checks that putting `node` (and everything under it) directly
          * inside the directory `parent` would not nest deeper than
@@ -689,6 +774,28 @@
                 : null;
         },
 
+        /**
+         * Checks whether an EXISTING entry can be moved or renamed to
+         * `name` inside the directory `parent`. A move adds nothing new,
+         * so only the new name and the resulting depth are checked.
+         * @param {string} name - The entry's new name (last path segment).
+         * @param {Object} node - The node being moved.
+         * @param {Object} parent - The directory node it is moving into.
+         * @returns {string|null} null if fine, otherwise an error message.
+         */
+        checkMove(name, node, parent) {
+            return this.checkName(name) ?? this.checkDepth(parent, node);
+        },
+
+        /**
+         * Prepares a tree that was built or copied outside this module
+         * (e.g. by structuredClone() in `cp`) to be attached to the
+         * filesystem. See bareChildren() at the top of this file.
+         * @param {Object} node - Root of the tree to prepare.
+         * @returns {Object} The same node.
+         */
+        normalizeTree(node) {
+            return bareChildren(node);
         },
 
         /**
@@ -699,12 +806,19 @@
          * @param {string} name - The new entry's name (last path segment).
          * @param {Object} [node] - The node about to be added. Omit for a
          *   new empty file or directory.
+         * @param {Object} [parent] - The directory node it is going into.
+         *   When given, the nesting depth is checked too.
          * @returns {string|null} null if it fits, otherwise an error
-         *   message ("File name too long" / "No space left on device").
+         *   message ("File name too long" / "Invalid file name" /
+         *   "Directory nesting too deep" / "No space left on device").
          */
-        checkSpace(name, node = null) {
+        checkSpace(name, node = null, parent = null) {
             const nameError = this.checkName(name);
             if (nameError) return nameError;
+            if (parent) {
+                const depthError = this.checkDepth(parent, node);
+                if (depthError) return depthError;
+            }
             const used = measureNode(FileSystem[ROOT]);
             const added = node ? measureNode(node) : { chars: 0, nodes: 1 };
             if (used.nodes + added.nodes > FS_MAX_NODES ||
@@ -717,7 +831,7 @@
         // Attaches `node` as a new top-level child of root under `name`
         // (used by bootstrap.js to mount /bin and /dev).
         mount(name, node) {
-            FileSystem[ROOT].children[name] = node;
+            FileSystem[ROOT].children[name] = bareChildren(node);
         },
 
         // Serializes the entire filesystem tree to a JSON string (for localStorage).
@@ -746,9 +860,11 @@
                     throw new Error("saved filesystem failed structural validation");
                 }
                 FileSystem = parsed;
+                bareChildren(FileSystem[ROOT]);
                 return true;
             } catch (e) {
                 FileSystem = JSON.parse(DEFAULT_FILESYSTEM_JSON);
+                bareChildren(FileSystem[ROOT]);
                 return false;
             }
         },
@@ -756,6 +872,7 @@
         // Discards all changes and restores the original seed filesystem (used by `reset`).
         resetToDefault() {
             FileSystem = JSON.parse(DEFAULT_FILESYSTEM_JSON);
+            bareChildren(FileSystem[ROOT]);
         },
 
         /**
@@ -829,7 +946,7 @@
                 // going forward (accessed/modified timestamps etc.) and
                 // shouldn't share references with freshTree.
                 const isNew = !localNode;
-                parent.children[name] = structuredClone(freshNode);
+                parent.children[name] = bareChildren(structuredClone(freshNode));
                 parent.modified = Date.now();
                 updatedSync[path] = freshNode.seedVersion;
                 changes.push({ path, action: isNew ? "added" : "updated" });
