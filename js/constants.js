@@ -85,6 +85,12 @@ const FS_MAX_FILE_CHARS = 250000;   // one file's content
 const FS_MAX_TOTAL_CHARS = 750000;  // all content + names + link targets together
 const FS_MAX_NODES = 2000;          // files + directories + links + devices
 const FS_MAX_NAME_LENGTH = 255;     // one file/directory name
+// How many levels below "/" an entry may sit ("/home/guest/a" is 3). This
+// MUST stay well below the depth the saved-filesystem validator accepts
+// (MAX_TREE_DEPTH in js/filesystem/fileapi.js): a tree deeper than the
+// validator allows saves fine but is then rejected as corrupted on the
+// next visit, which throws away everything the visitor created.
+const FS_MAX_DEPTH = 64;
 
 // Limits applied to the saved session settings (history, env, aliases)
 // when they are saved and when they are read back at boot - see

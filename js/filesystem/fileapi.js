@@ -669,6 +669,26 @@
          */
         checkName(name) {
             return String(name).length > FS_MAX_NAME_LENGTH ? "File name too long" : null;
+        /**
+         * Checks that putting `node` (and everything under it) directly
+         * inside the directory `parent` would not nest deeper than
+         * FS_MAX_DEPTH levels below "/".
+         * @param {Object} parent - The directory node it would go into.
+         * @param {Object} [node] - The node being added or moved. Omit
+         *   for a new empty file or directory.
+         * @returns {string|null} null if fine, otherwise an error message.
+         */
+        checkDepth(parent, node = null) {
+            const parentDepth = depthOf(parent);
+            if (parentDepth < 0) {
+                return null; // not in the tree - nothing to measure against
+            }
+            const height = node ? treeHeight(node) : 1;
+            return parentDepth + height > FS_MAX_DEPTH
+                ? "Directory nesting too deep"
+                : null;
+        },
+
         },
 
         /**
