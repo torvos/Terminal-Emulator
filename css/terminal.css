@@ -60,6 +60,11 @@ body {
     clip-path: inset(50%);
     white-space: nowrap;
     border: 0;
+    /* Not part of what a mouse selection copies: where this text repeats
+       a visible line (the animated boot lines), copying the output would
+       otherwise paste that line twice. */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 #terminal-container {
