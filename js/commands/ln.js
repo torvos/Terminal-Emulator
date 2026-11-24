@@ -90,7 +90,7 @@ registerCommand("ln", {
                 }
 
                 const newLink = terminal.fs.createLink(targetPath);
-                const spaceError = terminal.fs.checkSpace(result.name, newLink);
+                const spaceError = terminal.fs.checkSpace(result.name, newLink, result.parent);
                 if (spaceError) {
                     return {
                         stdout: "",

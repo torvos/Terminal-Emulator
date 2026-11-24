@@ -58,7 +58,7 @@ registerCommand("touch", {
                 return `touch: invalid path ${target}`;
             }
 
-            const spaceError = terminal.fs.checkSpace(result.name);
+            const spaceError = terminal.fs.checkSpace(result.name, null, result.parent);
             if (spaceError) {
                 return `touch: ${target}: ${spaceError}`;
             }

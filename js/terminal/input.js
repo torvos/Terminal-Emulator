@@ -601,8 +601,8 @@ Object.assign(TerminalEngine.prototype, {
                 }
                 if (input === "reset"){
                     // Special-cased hard reset: wipe saved state and reload the page
-                    localStorage.removeItem(STORAGE_KEY_SETTINGS);
-                    localStorage.removeItem(STORAGE_KEY_FILESYSTEM);
+                    this.removeStorage(STORAGE_KEY_SETTINGS);
+                    this.removeStorage(STORAGE_KEY_FILESYSTEM);
                     location.reload();
                     return;
                 } 

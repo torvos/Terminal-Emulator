@@ -1,6 +1,10 @@
 // Global registry that maps command names (e.g. "ls", "cat") to their
 // implementation objects/functions. Populated by each file in js/commands/.
-window.Commands = {};
+// A "bare" object (no prototype): looking up a name that was never
+// registered gives undefined even for names like "constructor" or
+// "toString", which an ordinary object would answer with JavaScript's
+// own built-in properties.
+window.Commands = Object.create(null);
 
 /**
  * Registers a command so the terminal's executor/parser can look it up by name.

@@ -44,7 +44,7 @@ registerCommand("edit", {
                     exitCode: EXIT_FAILURE
                 };
             }
-            const spaceError = terminal.fs.checkSpace(result.name);
+            const spaceError = terminal.fs.checkSpace(result.name, null, result.parent);
             if (spaceError) {
                 return {
                     stdout: "",

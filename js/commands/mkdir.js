@@ -64,7 +64,7 @@ registerCommand("mkdir", {
                 if (!result) {
                     return `mkdir: invalid path ${currentPath}`;
                 }
-                const spaceError = terminal.fs.checkSpace(result.name);
+                const spaceError = terminal.fs.checkSpace(result.name, null, result.parent);
                 if (spaceError) {
                     return `mkdir: ${currentPath}: ${spaceError}`;
                 }
@@ -100,7 +100,7 @@ registerCommand("mkdir", {
                 return `mkdir: cannot create directory '${target}': No such file or directory`;
             }
 
-            const spaceError = terminal.fs.checkSpace(result.name);
+            const spaceError = terminal.fs.checkSpace(result.name, null, result.parent);
             if (spaceError) {
                 return `mkdir: ${target}: ${spaceError}`;
             }

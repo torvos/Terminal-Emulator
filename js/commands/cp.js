@@ -96,7 +96,7 @@ registerCommand("cp", {
                 return `cp: ${destPath}: already exists`;
             }
 
-            const spaceError = terminal.fs.checkSpace(dest.name, src.parent.children[src.name]);
+            const spaceError = terminal.fs.checkSpace(dest.name, src.parent.children[src.name], dest.parent);
             if (spaceError) {
                 return `cp: ${destPath}: ${spaceError}`;
             }
@@ -106,7 +106,7 @@ registerCommand("cp", {
 
             // Deep clone so the copy is fully independent of the original
             // (structuredClone recurses through `children` for directories)
-            const copy = structuredClone(src.parent.children[src.name]);
+            const copy = terminal.fs.normalizeTree(structuredClone(src.parent.children[src.name]));
             const now = Date.now();
             copy.created = now;
             copy.modified = now;

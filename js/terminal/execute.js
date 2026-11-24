@@ -743,7 +743,7 @@ Object.assign(TerminalEngine.prototype, {
             if (!parent || !this.fs.isDirectory(parent.parent)) {
                 return `Invalid parent directory`;
             }
-            const spaceError = this.fs.checkSpace(parent.name);
+            const spaceError = this.fs.checkSpace(parent.name, null, parent.parent);
             if (spaceError) {
                 return spaceError;
             }

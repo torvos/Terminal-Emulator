@@ -105,10 +105,11 @@ registerCommand("mv", {
                 return `mv: ${destPath}: already exists`;
             }
 
-            // A move adds nothing new, so only the new name needs checking.
-            const nameError = terminal.fs.checkName(dest.name);
-            if (nameError) {
-                return `mv: ${destPath}: ${nameError}`;
+            // A move adds nothing new, so only the new name and how deep
+            // the moved tree would end up need checking.
+            const moveError = terminal.fs.checkMove(dest.name, src.parent.children[src.name], dest.parent);
+            if (moveError) {
+                return `mv: ${destPath}: ${moveError}`;
             }
 
             src.parent.modified = Date.now();
