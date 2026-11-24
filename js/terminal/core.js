@@ -560,6 +560,34 @@ class TerminalEngine {
     }
 
     /**
+     * Whether the visitor has asked their system for less motion
+     * (the "Reduce motion" accessibility setting on macOS/iOS/Windows/
+     * Android, exposed to pages as prefers-reduced-motion). Checked each
+     * time it's needed, so changing the setting takes effect at once.
+     * @returns {boolean}
+     */
+    prefersReducedMotion() {
+        return typeof window.matchMedia === "function" &&
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+
+    /**
+     * A pause that exists purely for visual effect (the typewriter boot
+     * text, the line-by-line reveal of command output, the pager's
+     * scrolling). Skipped entirely for visitors who prefer reduced
+     * motion, so their output simply appears. Use sleep() instead for a
+     * wait that is part of what a command does.
+     * @param {number} ms - Milliseconds to wait.
+     */
+    async animationDelay(ms) {
+        if (this.prefersReducedMotion()) {
+            this.checkInterrupt();
+            return;
+        }
+        await this.sleep(ms);
+    }
+
+    /**
      * The real implementation behind sleep(). Kept separate so the `sleep`
      * command can call it directly: the test harness replaces sleep() with
      * a no-op to skip animation delays, which must not turn `sleep 2`

@@ -356,6 +356,11 @@ Object.assign(TerminalEngine.prototype, {
      */
     async typeWrite(div, text, delay = 15) {
         const safeText = text ?? "";
+        if (this.prefersReducedMotion()) {
+            // No typewriter effect: the whole text appears at once.
+            div.textContent += safeText;
+            return;
+        }
         for (let i = 0; i < safeText.length; i++) {
             div.textContent += safeText[i];
             await this.sleep(delay);

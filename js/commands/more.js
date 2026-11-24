@@ -106,7 +106,7 @@ registerCommand("more", {
                     break;
                 }
             }
-            await terminal.sleep(PAGER_SCROLL_DELAY_MS);
+            await terminal.animationDelay(PAGER_SCROLL_DELAY_MS);
         }
         return {
             stdout:"",

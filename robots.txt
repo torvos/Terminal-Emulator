@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://torvos.ca/sitemap.xml

@@ -36,6 +36,17 @@ body {
     display: none !important;
 }
 
+/* The message shown in place of the terminal when JavaScript is off
+   (see the <noscript> block in index.html). */
+.noscript-message {
+    max-width: 70ch;
+    line-height: 1.5;
+}
+
+.noscript-message a {
+    color: #8ab4ff;   /* the browser's default link blue is unreadable on black */
+}
+
 /* Content for screen readers only: present in the page, but takes up no
    space and is invisible on screen. Used for text equivalents of purely
    visual output (see writeForScreenReaders() in js/terminal/render.js). */

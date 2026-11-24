@@ -188,7 +188,9 @@ Object.assign(TerminalEngine.prototype, {
             const delay = owedDelay;
             owedDelay = 0;
             this.scrollToBottom();
-            await this.sleep(delay);
+            // Skipped for visitors who prefer reduced motion - their
+            // output appears all at once.
+            await this.animationDelay(delay);
         };
         const emit = async (text, opts, perLineDelay = LINE_PRINT_DELAY_MS) => {
             if (capture) {

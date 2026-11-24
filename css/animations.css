@@ -21,3 +21,17 @@
     50%{transform:translateX(2px);}
     75%{transform:translateX(-2px);}
 }
+
+/* Visitors who have asked their system for less motion ("Reduce motion")
+   get a steady cursor and no shake. The typewriter boot text and the
+   line-by-line output reveal are switched off for them in JavaScript -
+   see prefersReducedMotion() in js/terminal/core.js. */
+@media (prefers-reduced-motion: reduce) {
+    #cursor{
+        animation:none;
+    }
+
+    .shake{
+        animation:none;
+    }
+}
