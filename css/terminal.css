@@ -187,12 +187,26 @@ body {
 }
 
 @media (pointer: coarse) {
+    /* On touch devices the terminal stops short of the bottom of the
+       screen, leaving a strip the buttons sit in - so they never cover
+       the last lines of output or what is being typed. */
+    #terminal-container{
+        bottom:calc(var(--toolbar-height) + env(safe-area-inset-bottom, 0px));
+    }
+
     #mobile-toolbar{
         display:flex;
+        align-items:center;
+        justify-content:flex-end;
         gap:8px;
         position:fixed;
-        right:10px;
-        bottom:calc(10px + env(safe-area-inset-bottom, 0px));
+        left:0;
+        right:0;
+        bottom:0;
+        height:calc(var(--toolbar-height) + env(safe-area-inset-bottom, 0px));
+        padding:0 10px env(safe-area-inset-bottom, 0px);
+        background:var(--background);
+        border-top:1px solid #222;
         z-index:10;
     }
 
@@ -221,12 +235,6 @@ body {
     body:not(.editor-mode) #mobile-save-btn,
     body:not(.editor-mode) #mobile-save-exit-btn{
         display:none;
-    }
-
-    /* Leave room under the last line of text so the buttons, which float
-       over the bottom of the editor, never cover what is being typed. */
-    body.editor-mode #editor{
-        padding-bottom:56px;
     }
 
     body.editor-mode #mobile-tab-btn{
