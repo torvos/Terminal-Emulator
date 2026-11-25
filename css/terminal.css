@@ -96,10 +96,25 @@ body {
 }
 
 #output{
+    /* Keep the output's own spaces and line breaks, and wrap lines that
+       are too long for the screen at a space - between words, not in the
+       middle of one. Only text with nowhere to break (a long URL, a row
+       of box-drawing characters) is split wherever it has to be. */
     white-space: pre-wrap;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    word-break: break-all;     
+    overflow-wrap: anywhere;
+}
+
+#output a{
+    color: var(--link);
+}
+
+#output a:visited{
+    color: var(--link-visited);
+}
+
+#output a:hover,
+#output a:focus-visible{
+    color: #ffffff;
 }
 
 #editor-container {

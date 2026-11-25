@@ -56,11 +56,14 @@ window.__DEFAULT_FILESYSTEM_SEED__ = {
                                 // Bump this whenever this file's shipped
                                 // content changes - see reconcileSeed()
                                 // below for what that does with it.
-                                seedVersion: 1,
-                                content: `I'm Torvos (contact@torvos.ca) a senior cloud architecture and cybersecurity leader with more than 23 years of experience 
-delivering enterprise technology solutions. Recognized for leading cloud modernization initiatives, establishing enterprise 
-architecture and security strategies, building high-performing technical teams, and advising executives on cloud adoption, 
-cybersecurity, DevSecOps, and digital transformation.
+                                //
+                                // Write each paragraph as ONE long line (no
+                                // line breaks inside it). The terminal wraps
+                                // long lines to fit the screen; a line break
+                                // typed here is kept as-is and leaves ragged
+                                // short lines on a phone.
+                                seedVersion: 2,
+                                content: `I'm Torvos (contact@torvos.ca) a senior cloud architecture and cybersecurity leader with more than 23 years of experience delivering enterprise technology solutions. Recognized for leading cloud modernization initiatives, establishing enterprise architecture and security strategies, building high-performing technical teams, and advising executives on cloud adoption, cybersecurity, DevSecOps, and digital transformation.
 
 ----------- Skills and Expertise -----------
  - Security: Proficient in network security, threat analysis, risk management, and incident response.
