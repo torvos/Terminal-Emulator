@@ -11,6 +11,14 @@
     --prompt:#66ff99;
     --cursor:#33ff66;
     --terminal-font-size: clamp(10px, 2.8vw, 17px);
+    /* Links in the output. The browser's default link colours (dark blue,
+       and purple once visited) are close to unreadable on black; these
+       both have a contrast of about 9:1. */
+    --link:#8ab4ff;
+    --link-visited:#c9a8ff;
+    /* Height of the strip kept free at the bottom of the screen for the
+       touch buttons (see #mobile-toolbar). Only applied on touch devices. */
+    --toolbar-height:52px;
 }
 
 html,
@@ -44,7 +52,7 @@ body {
 }
 
 .noscript-message a {
-    color: #8ab4ff;   /* the browser's default link blue is unreadable on black */
+    color: var(--link);
 }
 
 /* Content for screen readers only: present in the page, but takes up no
