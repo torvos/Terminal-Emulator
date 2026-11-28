@@ -22,6 +22,7 @@ const HELP_SECTIONS = [
         ["man <command>", "Show help for a command", "Help for a command"],
         ["<command> --help", "Show help for a command", "Help for a command"],
         ["help", "Show this help message", "Show this message"],
+        ["open", "Open a link shown on screen (keyboard)", "Open a link on screen"],
         ["reset", "Reverts terminal to original settings", "Restore original settings"],
         ["clear", "Clear terminal display", "Clear the screen"]
     ]]
