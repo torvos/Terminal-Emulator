@@ -76,10 +76,8 @@
     <div id="terminal-container">
         <main id="terminal">
             <div id="output" role="log" aria-live="polite" aria-label="Terminal output"></div>
-            <div id="input-line" aria-hidden="true">
-                <span id="prompt"></span>
-                <span id="command"></span>
-            </div>
+            <!-- One line, nothing between the tags - see the same comment in index.html. -->
+            <div id="input-line" aria-hidden="true"><span id="prompt"></span><span id="command"></span></div>
             <div id="editor-container">
                 <div id="editor-header" role="status" aria-live="polite"></div>
                 <textarea id="editor" aria-label="File editor" spellcheck="false"></textarea>
@@ -229,6 +227,7 @@
 <script src="tests/empty-stdin.test.js"></script>
 <script src="tests/filesystem-restore-validation.test.js"></script>
 <script src="tests/find.test.js"></script>
+<script src="tests/fit-boxes.test.js"></script>
 <script src="tests/glob-quoting.test.js"></script>
 <script src="tests/help-layout.test.js"></script>
 <script src="tests/brace-limit.test.js"></script>

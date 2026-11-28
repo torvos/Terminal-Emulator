@@ -597,7 +597,16 @@ Object.assign(TerminalEngine.prototype, {
                         // `&&` chaining. This must run BEFORE the error handling
                         // below, or a non-zero exit would swallow stdout entirely.
                         if (index === pipeline.length - 1 && result.stdout) {
-                            const lines = result.stdout.split(/\r?\n/);
+                            let lines = result.stdout.split(/\r?\n/);
+                            // On a screen too narrow for a box drawn in
+                            // the output, show the text without the box
+                            // (see fitBoxes() in render.js). Display
+                            // only - and skipped when capturing, or when
+                            // the command supplied its own coloring,
+                            // which is tied to the original lines.
+                            if (!capture && !Array.isArray(result.stdoutSegments)) {
+                                lines = this.fitBoxes(lines, this.getColumns());
+                            }
                             // A command can optionally return `stdoutSegments`
                             // - an array of colored { text, color } segments
                             // per line, parallel to `stdout`'s lines - to

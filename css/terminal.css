@@ -89,10 +89,15 @@ body {
 }
 
 #input-line{
-    padding-top: 1px;    
-    display:flex;
-    flex-wrap:wrap;
-    white-space: pre;
+    padding-top: 1px;
+    /* The prompt and what is being typed flow as one run of text that
+       wraps at the right edge like a real terminal: the line breaks
+       after whichever character no longer fits, including spaces, so a
+       long command continues on the next row and the cursor never
+       leaves the screen. */
+    white-space: break-spaces;
+    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 #output{

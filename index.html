@@ -59,10 +59,11 @@
             </div>
         </noscript>
         <div id="output" role="log" aria-live="polite" aria-label="Terminal output"></div>
-        <div id="input-line" aria-hidden="true">
-            <span id="prompt"></span>
-            <span id="command"></span>
-        </div>
+        <!-- Keep the two spans on ONE line with nothing between the tags.
+             Spaces and line breaks inside #input-line are displayed (its
+             CSS preserves them so typed spaces show), so any here would
+             appear as blank rows around the prompt. -->
+        <div id="input-line" aria-hidden="true"><span id="prompt"></span><span id="command"></span></div>
         <div id="editor-container">
             <div id="editor-header" role="status" aria-live="polite">
             </div>

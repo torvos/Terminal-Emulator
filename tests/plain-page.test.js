@@ -78,6 +78,15 @@ test("there is a no-JavaScript message that links to the plain version", async (
     assertIncludes(noscript[1], 'href="plain.html"');
 });
 
+test("the prompt line has no stray whitespace between its tags (it would be displayed)", async () => {
+    for (const file of ["index.html", "test.html"]) {
+        const html = readFile(file);
+        const line = html.match(/<div id="input-line"[^>]*>([\s\S]*?)<\/div>/);
+        assert(line, `${file} should have #input-line`);
+        assertEqual(line[1], '<span id="prompt"></span><span id="command"></span>');
+    }
+});
+
 test("link-preview tags are present and use absolute URLs", async () => {
     const html = readFile("index.html");
     for (const property of ["og:title", "og:description", "og:url", "og:image", "og:type"]) {

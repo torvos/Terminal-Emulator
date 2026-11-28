@@ -32,6 +32,48 @@ Object.assign(TerminalEngine.prototype, {
     },
 
     /**
+     * Takes the box off boxed output when the box is too wide for the
+     * screen.
+     *
+     * Some output is drawn inside a box of "+", "-" and "|" characters
+     * (contact.md, for example). On a screen narrower than the box,
+     * every row would wrap and the box would fall apart into stray
+     * fragments. When that would happen, the border rows are dropped and
+     * the side bars are removed from the rows in between, leaving the
+     * text. Output whose boxes fit - and output with no box at all - is
+     * returned unchanged.
+     *
+     * Pure text in, text out; only used for what is shown on screen.
+     * Pipes and redirects always get a command's original output.
+     *
+     * @param {string[]} lines - The output, one entry per line.
+     * @param {number} columns - Characters that fit on one line.
+     * @returns {string[]} The lines to display.
+     */
+    fitBoxes(lines, columns) {
+        const isBorder = (line) => /^\s*\+[-=+]{2,}\+\s*$/.test(line);
+        const rowPattern = /^\s*\|(.*)\|\s*$/;
+        const tooWide = lines.some(line => isBorder(line) && line.trimEnd().length > columns);
+        // Only a real box counts: a border AND at least one row between
+        // bars. A lone border line (say, the first line of a box cut off
+        // by `head -n 1`) is left alone rather than shown as nothing.
+        if (!tooWide || !lines.some(line => rowPattern.test(line))) {
+            return lines;
+        }
+        const result = [];
+        for (const line of lines) {
+            if (isBorder(line)) {
+                continue;
+            }
+            const row = line.match(rowPattern);
+            // Drop the one space of padding after the left bar, keep any
+            // further indentation, and drop the padding before the right bar.
+            result.push(row ? row[1].replace(/^ /, "").trimEnd() : line);
+        }
+        return result;
+    },
+
+    /**
      * Removes the oldest lines of output once there are more than
      * MAX_SCROLLBACK_LINES (see constants.js). Called after every line
      * is added, so normally it removes at most one.
@@ -75,6 +117,16 @@ Object.assign(TerminalEngine.prototype, {
         afterSpan.textContent = after;
 
         this.commandEl.replaceChildren(beforeSpan, cursorSpan, afterSpan);
+
+        // A long command wraps onto extra rows; keep the row being typed
+        // on in view. Only done when the text or cursor actually changed,
+        // so a key that edits nothing can't drag the view back down while
+        // someone is scrolled up reading.
+        const state = `${this.cursorPos}:${this.currentInput}`;
+        if (state !== this._lastRenderedInput) {
+            this._lastRenderedInput = state;
+            this.scrollToBottom();
+        }
     },
 
     // Clears all terminal output (used by the `clear`/`reset` commands).
