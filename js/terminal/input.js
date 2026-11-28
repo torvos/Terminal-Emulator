@@ -94,6 +94,18 @@ Object.assign(TerminalEngine.prototype, {
         // (wired up separately in editor.js when the editor opens).
         this.editorKeyHandler = (event) => {
 
+            // Tab: indent, rather than moving focus out of the editor
+            // (the browser's default for Tab in a text area). Shift+Tab
+            // would move focus backwards, so it is stopped too. Esc is
+            // the way out of the editor - the header says so.
+            if (event.key === "Tab") {
+                event.preventDefault();
+                if (!event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+                    this.insertIntoEditor("\t");
+                }
+                return;
+            }
+
             // Ctrl+S: save the file being edited
             if (event.ctrlKey && event.key.toLowerCase() === "s") {
                 event.preventDefault();
@@ -377,6 +389,21 @@ Object.assign(TerminalEngine.prototype, {
             "PageUp", "PageDown", "Home", "End"
         ]);
         document.addEventListener("keydown", (e) => {
+            // Tab never moves focus out of the terminal. It means
+            // "complete" at the prompt and "indent" in the editor, and
+            // both of those handlers have already run by the time the
+            // event reaches the document - this is the catch-all for
+            // everywhere else Tab or Shift+Tab could be pressed (focus on
+            // a link that was just clicked, on a touch button, on the
+            // page itself after selecting text). Links are opened from
+            // the keyboard with the `open` command instead.
+            if (e.key === "Tab") {
+                e.preventDefault();
+                if (this.inputMode === INPUT_EDITOR && e.target !== this.editorEl) {
+                    this.editorEl.focus();
+                    return;
+                }
+            }
             if (e.target === this.hiddenInput || this.inputMode === INPUT_EDITOR) {
                 return; // the hidden input's / the editor's own listener has it
             }

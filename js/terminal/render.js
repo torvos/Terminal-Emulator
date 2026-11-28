@@ -32,6 +32,50 @@ Object.assign(TerminalEngine.prototype, {
     },
 
     /**
+     * Lists the links currently shown in the output, in the order they
+     * first appear, each once. Used by the `open` command so links can
+     * be chosen by number from the keyboard.
+     * @returns {Array<{text: string, href: string, type: "url"|"email"}>}
+     */
+    listLinks() {
+        const seen = new Set();
+        const links = [];
+        for (const anchor of this.output.querySelectorAll("a")) {
+            const href = anchor.getAttribute("href");
+            if (!href || seen.has(href)) continue;
+            seen.add(href);
+            links.push({
+                text: anchor.textContent,
+                href,
+                type: href.startsWith("mailto:") ? "email" : "url"
+            });
+        }
+        return links;
+    },
+
+    /**
+     * Opens a link exactly as clicking it would: by activating a real
+     * (invisible, temporary) <a> element, so the browser applies its
+     * normal rules for links and pop-ups.
+     * @param {string} href - The address. Callers only pass http(s) and
+     *   mailto addresses produced by findLinks().
+     * @param {boolean} newTab - true for web pages; false for email
+     *   addresses, which hand over to the mail program instead.
+     */
+    openLink(href, newTab) {
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        if (newTab) {
+            anchor.target = "_blank";
+            anchor.rel = "noopener noreferrer";
+        }
+        anchor.style.display = "none";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+    },
+
+    /**
      * Takes the box off boxed output when the box is too wide for the
      * screen.
      *

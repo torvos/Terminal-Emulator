@@ -21,7 +21,7 @@ test("a wide screen gets the boxed layout, every line the same width", async () 
     const lines = await helpAt(120);
     assertEqual(lines[0], "    +" + "-".repeat(68) + "+");
     assert(lines.every((l) => l.length === 74), "every boxed line should be 74 characters");
-    assertEqual(lines.length, 22);
+    assertEqual(lines.length, 23);
     assertIncludes(lines.join("\n"), "|  cat <file>       Display file contents, example cat readme.md     |");
 });
 
@@ -40,7 +40,7 @@ test("both layouts list the same commands", async () => {
     const wide = (await helpAt(120)).join("\n");
     const narrow = (await helpAt(50)).join("\n");
     for (const command of ["ls", "ls -l", "cd <dir>", "cd ..", "cat <file>", "edit <file>", "more <file>",
-                           "man <command>", "<command> --help", "help", "reset", "clear"]) {
+                           "man <command>", "<command> --help", "help", "open", "reset", "clear"]) {
         assertIncludes(wide, `  ${command} `);
         assertIncludes(narrow, `  ${command} `);
     }

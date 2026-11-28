@@ -40,6 +40,32 @@ Object.assign(TerminalEngine.prototype, {
     },
 
     /**
+     * Types `text` into the editor at the cursor, replacing the current
+     * selection if there is one - used for the Tab key, which would
+     * otherwise move focus out of the editor instead of indenting.
+     * @param {string} text
+     */
+    insertIntoEditor(text) {
+        const editor = this.editorEl;
+        editor.focus();
+        // execCommand is the one way to insert text that keeps the
+        // browser's own undo history (Ctrl+Z) working. It is an old API,
+        // so fall back to editing the value directly where it's missing.
+        const inserted = typeof document.execCommand === "function" &&
+            document.execCommand("insertText", false, text);
+        if (!inserted) {
+            const start = editor.selectionStart ?? editor.value.length;
+            const end = editor.selectionEnd ?? start;
+            editor.value = editor.value.slice(0, start) + text + editor.value.slice(end);
+            if (typeof editor.setSelectionRange === "function") {
+                editor.setSelectionRange(start + text.length, start + text.length);
+            }
+        }
+        this.resumeEditing();
+        this.editor.modified = true;
+    },
+
+    /**
      * Whether the text in the editor differs from what is stored in the
      * file - i.e. whether closing now would lose something. Compares the
      * actual text, so moving the cursor around, or typing something and
